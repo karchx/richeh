@@ -1,16 +1,67 @@
-pub const Token = struct {
-    start: u32,
-    end: u32,
-    id: Id,
-
-    pub const Id = enum(u8) { eof, identifier, equal, plus };
-
-    pub fn string(id: Id) []const u8 {
-        return switch (id) {
-            .eof => "<EOF>",
-            .identifier => "IDENTIFIER",
-            .equal => "=",
-            .plus => "+",
-        };
-    }
+const std = @import("std");
+const mem = std.mem;
+pub const TokenType = enum {
+    /// An identifier, variable or function name
+    Identifier,
+    /// Operator '='
+    Equal,
+    /// Operator '+'
+    Plus,
+    /// Operator '-'
+    Minus,
+    /// Operator '*'
+    Mult,
+    /// Operator '/'
+    Div,
+    /// An comment XD.
+    Comment,
 };
+
+fn ArrayList(comptime T: type) type {
+    return std.array_list.Managed(T);
+}
+
+// Represents the position of a token in the source code.
+pub const Pos = struct {
+    line: u32,
+    col: u32,
+    start_col: u32,
+    end_col: u32,
+    end_line: u32 = 0,
+    filename: []const u8,
+};
+
+pub const TokenData = union(enum) {
+    /// A single character value.
+    cval: u8,
+    /// A string value.
+    sval: ArrayList(u8),
+    /// An integer value.
+    inum: c_int,
+    /// A long integer value.
+    lnum: c_long,
+    /// A long long integer value.
+    llnum: c_longlong,
+    /// A double-precision floating-point value.
+    dnum: f64,
+    /// A bool value.
+    bval: bool,
+};
+
+pub const Token = struct {
+    type: TokenType,
+    data: TokenData,
+    pos: Pos,
+    whitespace: bool = false,
+};
+
+pub fn is_operator(token: ?Token, val: []const u8) bool {
+    const t = token orelse return false;
+
+    if (!mem.eql(u8, token.?.data.sval.items, val)) return false;
+
+    return switch (t.?.type) {
+        .Plus, .Div, .Mult, .Minus => true,
+        else => false,
+    };
+}
