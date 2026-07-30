@@ -24,7 +24,7 @@ pub const Lexer = struct {
         return std.Io.Threaded.global_single_threaded.io();
     }
 
-    pub fn init(allocator: mem.Allocator, ifilepath: []const u8) Lexer!Self {
+    pub fn init(allocator: mem.Allocator, ifilepath: []const u8) LexError!Self {
         const io = globalIo();
         const ifile = blk: {
             const is_abs = std.fs.path.isAbsolute(ifilepath);
@@ -33,6 +33,9 @@ pub const Lexer = struct {
                     return LexError.FileOpenError;
                 };
             }
+            break :blk std.Io.Dir.cwd().openFile(io, ifilepath, .{ .mode = .read_only }) catch {
+                return LexError.FileOpenError;
+            };
         };
         errdefer ifile.close(io);
 
@@ -134,5 +137,9 @@ pub const Lexer = struct {
         if (c == null) {
             return t;
         }
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.ifile.close(self.io);
     }
 };
