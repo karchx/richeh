@@ -15,6 +15,8 @@ pub const TokenType = enum {
     Div,
     /// An comment XD.
     Comment,
+    /// An newline
+    NewLine,
 };
 
 fn ArrayList(comptime T: type) type {

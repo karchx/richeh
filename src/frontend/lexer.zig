@@ -3,6 +3,8 @@ const mem = std.mem;
 const ascii = std.ascii;
 const unicode = std.unicode;
 const token = @import("token.zig");
+const lib = @import("lib");
+const Vector = lib.vector.Vector;
 
 fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
@@ -28,6 +30,7 @@ pub const Lexer = struct {
     allocator: mem.Allocator,
     current_token: ?token.Token = null,
     file_offset: u64 = 0,
+    tokens: Vector(token.Token),
 
     const Self = @This();
 
@@ -58,7 +61,14 @@ pub const Lexer = struct {
         errdefer arena_ptr.deinit();
         const a = arena_ptr.allocator();
 
-        return Self{ .curr_exp_count = 0, .queued_token = null, .ifile = ifile, .allocator = a, .io = io };
+        return Self{
+            .curr_exp_count = 0,
+            .queued_token = null,
+            .ifile = ifile,
+            .allocator = a,
+            .io = io,
+            .tokens = Vector(token.Token).init(a),
+        };
     }
 
     fn in_expression(self: *Self) bool {
@@ -166,6 +176,22 @@ pub const Lexer = struct {
         };
     }
 
+    fn token_make_newline(self: *Self) LexError!token.Token {
+        _ = try self.next_char();
+        return token.Token{
+            .type = .NewLine,
+            .data = .{ .cval = '\n' },
+            .pos = token.Pos{
+                .col = 1,
+                .line = 1,
+                .start_col = 1,
+                .end_col = 2,
+                .end_line = 2,
+                .filename = "mock",
+            },
+        };
+    }
+
     fn handle_comment(self: *Self) LexError!?token.Token {
         const c = try self.peek_char();
         if (c == '-') {
@@ -180,6 +206,32 @@ pub const Lexer = struct {
         return null;
     }
 
+    fn handle_whitespace(self: *Self) LexError!?token.Token {
+        var last_token = self.tokens.back();
+        if (last_token != null) {
+            _ = self.tokens.pop();
+            last_token.?.whitespace = true;
+            self.tokens.push(last_token.?) catch {
+                return LexError.MemoryAllocationFailed;
+            };
+        }
+
+        _ = try self.next_char();
+        return self.read_next_token();
+    }
+
+    fn read_special_token(self: *Self) LexError!?token.Token {
+        const c = try self.peek_char();
+        if (c == null) {
+            return null;
+        }
+
+        if (ascii.isAlphabetic(c.?) or c.? == '_') {
+            return null;
+        }
+        return null;
+    }
+
     fn read_next_token(self: *Self) LexError!?token.Token {
         if (self.queued_token) |qt| {
             self.queued_token = null;
@@ -188,7 +240,6 @@ pub const Lexer = struct {
         }
 
         var t = try self.handle_comment();
-        std.debug.print("Token {any}\n", .{t});
 
         if (t != null) {
             t.?.pos.line = 1;
@@ -202,8 +253,10 @@ pub const Lexer = struct {
 
         switch (c.?) {
             '+', '-', '*', '/' => t = try self.token_make_operator(c),
+            '\n' => t = try self.token_make_newline(),
             ' ', '\t', '\r' => t = try self.handle_whitespace(),
             else => {
+                t = try self.read_special_token();
                 if (t == null) {
                     return LexError.InvalidCharacter;
                 }
@@ -217,7 +270,11 @@ pub const Lexer = struct {
     pub fn lex(self: *Self) LexError!void {
         var t = try self.read_next_token();
         while (t != null) {
+            self.tokens.push(t.?) catch {
+                return LexError.MemoryAllocationFailed;
+            };
             t = try self.read_next_token();
+            std.debug.print("Token: {any}\n", .{t});
         }
     }
 

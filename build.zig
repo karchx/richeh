@@ -4,8 +4,15 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/lib/root.zig"),
+    });
+
     const frontend_mod = b.createModule(.{
         .root_source_file = b.path("src/frontend/root.zig"),
+        .imports = &.{
+            .{ .name = "lib", .module = lib_mod },
+        },
     });
 
     const cli_mod = b.createModule(.{
