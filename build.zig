@@ -8,6 +8,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/frontend/root.zig"),
     });
 
+    const cli_mod = b.createModule(.{
+        .root_source_file = b.path("src/cli/cli.zig"),
+    });
+
     const exe = b.addExecutable(.{
         .name = "richeh",
         .root_module = b.createModule(.{
@@ -16,6 +20,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "frontend", .module = frontend_mod },
+                .{ .name = "cli", .module = cli_mod },
             },
         }),
     });
