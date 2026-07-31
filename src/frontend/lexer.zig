@@ -8,7 +8,16 @@ fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
 }
 
-pub const LexError = error{ InvalidOperator, InvalidNumber, InvalidExpression, FileReadError, FileOpenError, MemoryAllocationFailed };
+pub const LexError = error{
+    ///
+    InvalidOperator,
+    InvalidNumber,
+    InvalidExpression,
+    FileReadError,
+    FileOpenError,
+    MemoryAllocationFailed,
+    InvalidCharacter,
+};
 
 pub const Lexer = struct {
     queued_token: ?token.Token = null,
@@ -17,6 +26,8 @@ pub const Lexer = struct {
     ifile: std.Io.File,
     io: std.Io,
     allocator: mem.Allocator,
+    current_token: ?token.Token = null,
+    file_offset: u64 = 0,
 
     const Self = @This();
 
@@ -56,26 +67,45 @@ pub const Lexer = struct {
 
     fn next_char(self: *Self) LexError!?u8 {
         var buffer: [1]u8 = undefined;
-        const readBytes = self.ifile.readPositionalAll(self.io, &buffer, 0) catch {
+        const readBytes = self.ifile.readPositionalAll(self.io, &buffer, self.file_offset) catch {
             return LexError.FileReadError;
         };
 
         if (readBytes == 0) {
             return null;
         }
+        self.file_offset += 1;
 
         const c = buffer[0];
-
         return c;
     }
 
     fn peek_char(self: *Self) LexError!?u8 {
         var buffer: [1]u8 = undefined;
-        const readBytes = self.ifile.readPositionalAll(self.io, &buffer, 0) catch {
+        const readBytes = self.ifile.readPositionalAll(self.io, &buffer, self.file_offset) catch {
             return LexError.FileReadError;
         };
 
         return if (readBytes == 0) null else buffer[0];
+    }
+
+    fn read_op(self: *Self) LexError!ArrayList(u8) {
+        var buffer = ArrayList(u8).init(self.allocator);
+        const op0 = (try self.next_char()) orelse {
+            return LexError.InvalidOperator;
+        };
+        buffer.append(op0) catch {
+            return LexError.MemoryAllocationFailed;
+        };
+        const pc = try self.peek_char();
+        if (pc != null) {
+            buffer.append(pc.?) catch {
+                return LexError.MemoryAllocationFailed;
+            };
+            _ = try self.next_char();
+        }
+
+        return buffer;
     }
 
     /// Reads characters from the input file based on a given condition.
@@ -91,6 +121,27 @@ pub const Lexer = struct {
         }
     }
 
+    fn token_make_operator(self: *Self, c: ?u8) LexError!token.Token {
+        _ = try self.peek_char();
+        const sval = try self.read_op();
+        const tempTokenPos = token.Pos{
+            .col = 1,
+            .line = 1,
+            .start_col = 1,
+            .end_col = 2,
+            .end_line = 2,
+            .filename = "mock",
+        };
+
+        return switch (c.?) {
+            '+' => token.Token{ .type = .Plus, .data = .{ .sval = sval }, .pos = tempTokenPos },
+            '-' => token.Token{ .type = .Minus, .data = .{ .sval = sval }, .pos = tempTokenPos },
+            '*' => token.Token{ .type = .Mult, .data = .{ .sval = sval }, .pos = tempTokenPos },
+            '/' => token.Token{ .type = .Div, .data = .{ .sval = sval }, .pos = tempTokenPos },
+            else => undefined,
+        };
+    }
+
     fn token_make_comment(self: *Self) LexError!token.Token {
         var buffer = ArrayList(u8).init(self.allocator);
         try self.getc_if(&buffer, struct {
@@ -104,7 +155,14 @@ pub const Lexer = struct {
             .data = .{
                 .sval = buffer,
             },
-            .pos = 1,
+            .pos = token.Pos{
+                .col = 1,
+                .line = 1,
+                .start_col = 1,
+                .end_col = 2,
+                .end_line = 2,
+                .filename = "mock",
+            },
         };
     }
 
@@ -118,15 +176,19 @@ pub const Lexer = struct {
                 return try self.token_make_comment();
             }
         }
+
+        return null;
     }
 
     fn read_next_token(self: *Self) LexError!?token.Token {
         if (self.queued_token) |qt| {
             self.queued_token = null;
+            self.current_token = qt;
             return qt;
         }
 
         var t = try self.handle_comment();
+        std.debug.print("Token {any}\n", .{t});
 
         if (t != null) {
             t.?.pos.line = 1;
@@ -136,6 +198,26 @@ pub const Lexer = struct {
         const c = try self.peek_char();
         if (c == null) {
             return t;
+        }
+
+        switch (c.?) {
+            '+', '-', '*', '/' => t = try self.token_make_operator(c),
+            ' ', '\t', '\r' => t = try self.handle_whitespace(),
+            else => {
+                if (t == null) {
+                    return LexError.InvalidCharacter;
+                }
+            },
+        }
+
+        self.current_token = t;
+        return t;
+    }
+
+    pub fn lex(self: *Self) LexError!void {
+        var t = try self.read_next_token();
+        while (t != null) {
+            t = try self.read_next_token();
         }
     }
 

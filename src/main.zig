@@ -50,4 +50,10 @@ fn run_pipeline(ctx: anytype) void {
 
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     defer lp.deinit();
+
+    lp.lex() catch |err| print_error_and_exit(io, err);
+
+    if (options.print_ast) {
+        std.debug.print("Print AST!!", .{});
+    }
 }
