@@ -131,8 +131,71 @@ pub const Lexer = struct {
         }
     }
 
-    fn token_make_operator(self: *Self, c: ?u8) LexError!token.Token {
-        _ = try self.peek_char();
+    fn read_number_str(self: *Self) LexError!ArrayList(u8) {
+        var raw = ArrayList(u8).init(self.allocator);
+        defer raw.deinit();
+
+        try self.getc_if(&raw, struct {
+            fn call(_c: u8) bool {
+                return ascii.isDigit(_c) or _c == '_';
+            }
+        }.call);
+
+        var buffer = ArrayList(u8).init(self.allocator);
+        for (raw.items) |c| {
+            if (c == '_') continue;
+            buffer.append(c) catch return LexError.MemoryAllocationFailed;
+        }
+
+        return buffer;
+    }
+
+    fn read_number(self: *Self) LexError!c_longlong {
+        const s = try self.read_number_str();
+        defer s.deinit();
+
+        const number: c_longlong = std.fmt.parseInt(c_longlong, s.items, 10) catch {
+            return LexError.InvalidNumber;
+        };
+        return number;
+    }
+
+    fn token_make_number_from_string(self: *Self, number_str: []const u8) LexError!?token.Token {
+        const v: c_longlong = std.fmt.parseInt(c_longlong, number_str, 10) catch {
+            return LexError.InvalidNumber;
+        };
+
+        _ = try self.next_char();
+
+        return token.Token{
+            .type = .Number,
+            .data = .{ .llnum = v },
+            .pos = token.Pos{
+                .col = 1,
+                .line = 1,
+                .start_col = 1,
+                .end_col = 2,
+                .end_line = 2,
+                .filename = "mock",
+            },
+        };
+    }
+
+    fn token_make_number(self: *Self) LexError!?token.Token {
+        var buffer = try self.read_number_str();
+        defer buffer.deinit();
+
+        if (buffer.items.len == 0) {
+            buffer.append('0') catch {
+                return LexError.MemoryAllocationFailed;
+            };
+        }
+
+        return try self.token_make_number_from_string(buffer.items);
+    }
+
+    fn token_make_operator(self: *Self) LexError!token.Token {
+        const c = try self.peek_char();
         const sval = try self.read_op();
         const tempTokenPos = token.Pos{
             .col = 1,
@@ -252,7 +315,8 @@ pub const Lexer = struct {
         }
 
         switch (c.?) {
-            '+', '-', '*', '/' => t = try self.token_make_operator(c),
+            '+', '-', '*', '/' => t = try self.token_make_operator(),
+            '0'...'9' => t = try self.token_make_number(),
             '\n' => t = try self.token_make_newline(),
             ' ', '\t', '\r' => t = try self.handle_whitespace(),
             else => {
@@ -274,7 +338,6 @@ pub const Lexer = struct {
                 return LexError.MemoryAllocationFailed;
             };
             t = try self.read_next_token();
-            std.debug.print("Token: {any}\n", .{t});
         }
     }
 

@@ -13,6 +13,8 @@ pub const TokenType = enum {
     Mult,
     /// Operator '/'
     Div,
+    /// A numeric literal.
+    Number,
     /// An comment XD.
     Comment,
     /// An newline
