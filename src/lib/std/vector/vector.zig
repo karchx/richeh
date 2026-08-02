@@ -24,6 +24,8 @@ pub fn Vector(comptime T: type) type {
         /// The internal ArrayList for storing elements.
         data: ArrayList(T),
 
+        pindex: isize = 0,
+
         count: usize = 0,
         /// Structural-mutation counter. Bumped whenever an element is inserted or
         /// removed (push/push_slice/push_at/pop/peek_pop/clear). Moving `pindex`
@@ -39,6 +41,36 @@ pub fn Vector(comptime T: type) type {
                 .flags = .{ .peek_decrement = false },
                 .data = ArrayList(T).init(allocator),
             };
+        }
+
+        pub fn items(self: Self) []T {
+            return self.data.items;
+        }
+
+        pub fn at(self: *Self, index: usize) ?T {
+            if (index >= self.data.items.len) {
+                return null;
+            }
+            return self.data.items[index];
+        }
+
+        pub fn peek_no_increment(self: *Self) ?T {
+            if (self.pindex < 0 or self.pindex >= self.count) {
+                return null;
+            }
+            return self.at(@intCast(self.pindex));
+        }
+
+        pub fn peek(self: *Self) ?T {
+            const res = self.peek_no_increment();
+            if (res != null) {
+                if (self.flags.peek_decrement) {
+                    self.pindex -= 1;
+                } else {
+                    self.pindex += 1;
+                }
+            }
+            return res;
         }
 
         pub fn back(self: Self) ?T {

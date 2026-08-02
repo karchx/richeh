@@ -2,6 +2,7 @@ const std = @import("std");
 const frontend = @import("frontend");
 const cli = @import("cli");
 const lexer = frontend.lexer;
+const parser = frontend.parser;
 
 fn print_error_and_exit(io: std.Io, err: anyerror) noreturn {
     const stderr = std.Io.File.stderr();
@@ -49,9 +50,11 @@ fn run_pipeline(ctx: anytype) void {
     const io = ctx.io;
 
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
+    var pp = parser.Parse.init(&lp);
     defer lp.deinit();
 
     lp.lex() catch |err| print_error_and_exit(io, err);
+    pp.parse() catch |err| print_error_and_exit(io, err);
 
     if (options.print_ast) {
         std.debug.print("Print AST!!", .{});

@@ -3,6 +3,7 @@ const mem = std.mem;
 const ascii = std.ascii;
 const unicode = std.unicode;
 const token = @import("token.zig");
+const ast = @import("ast.zig");
 const lib = @import("lib");
 const Vector = lib.vector.Vector;
 
@@ -31,6 +32,7 @@ pub const Lexer = struct {
     current_token: ?token.Token = null,
     file_offset: u64 = 0,
     tokens: Vector(token.Token),
+    nodes: Vector(ast.Node),
 
     const Self = @This();
 
@@ -68,6 +70,7 @@ pub const Lexer = struct {
             .allocator = a,
             .io = io,
             .tokens = Vector(token.Token).init(a),
+            .nodes = Vector(ast.Node).init(a),
         };
     }
 

@@ -69,3 +69,12 @@ pub fn is_operator(token: ?Token, val: []const u8) bool {
         else => false,
     };
 }
+
+pub fn is_nl_or_comment_or_newline_separator(token: ?Token) bool {
+    if (token == null) {
+        return false;
+    }
+
+    return token.?.type == .NewLine or
+        token.?.type == .Comment;
+}
