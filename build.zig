@@ -1,8 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const current_version = builtin.zig_version;
+
 
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/lib/root.zig"),
@@ -38,8 +41,11 @@ pub fn build(b: *std.Build) void {
     const run_cmd = b.addRunArtifact(exe);
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
-
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+    if (current_version.major == 0 and current_version.minor == 17) {
+        run_cmd.addPassthruArgs(); 
+    } else {
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
     }
 }
