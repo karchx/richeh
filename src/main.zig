@@ -3,6 +3,7 @@ const frontend = @import("frontend");
 const cli = @import("cli");
 const lexer = frontend.lexer;
 const parser = frontend.parser;
+const pprint = frontend.pprint;
 
 fn print_error_and_exit(io: std.Io, err: anyerror) noreturn {
     const stderr = std.Io.File.stderr();
@@ -57,6 +58,11 @@ fn run_pipeline(ctx: anytype) void {
     pp.parse() catch |err| print_error_and_exit(io, err);
 
     if (options.print_ast) {
-        std.debug.print("Print AST!!", .{});
+        var ast_buf: [65536]u8 = undefined;
+        var ast_writer = std.Io.File.stdout().writer(io, &ast_buf);
+        for (lp.nodes.items()) |node| {
+            pprint.print_node(node, &ast_writer.interface, 0) catch |err| print_error_and_exit(io, err);
+        }
+        ast_writer.interface.flush() catch |err| print_error_and_exit(io, err);
     }
 }
