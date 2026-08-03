@@ -33,6 +33,7 @@ pub const Lexer = struct {
     file_offset: u64 = 0,
     tokens: Vector(token.Token),
     nodes: Vector(ast.Node),
+    pos: token.Pos,
 
     const Self = @This();
 
@@ -63,6 +64,11 @@ pub const Lexer = struct {
         errdefer arena_ptr.deinit();
         const a = arena_ptr.allocator();
 
+        const input_file_path = a.dupe(u8, ifilepath) catch {
+            return LexError.MemoryAllocationFailed;
+        };
+        errdefer a.free(input_file_path);
+
         return Self{
             .curr_exp_count = 0,
             .queued_token = null,
@@ -71,6 +77,7 @@ pub const Lexer = struct {
             .io = io,
             .tokens = Vector(token.Token).init(a),
             .nodes = Vector(ast.Node).init(a),
+            .pos = .{ .col = 1, .line = 1, .start_col = 1, .end_col = 1, .filename = input_file_path },
         };
     }
 
@@ -90,6 +97,13 @@ pub const Lexer = struct {
         self.file_offset += 1;
 
         const c = buffer[0];
+        if (c == '\n') {
+            self.pos.line += 1;
+            self.pos.col = 1;
+        } else {
+            self.pos.col += 1;
+        }
+
         return c;
     }
 
@@ -173,14 +187,7 @@ pub const Lexer = struct {
         return token.Token{
             .type = .Number,
             .data = .{ .llnum = v },
-            .pos = token.Pos{
-                .col = 1,
-                .line = 1,
-                .start_col = 1,
-                .end_col = 2,
-                .end_line = 2,
-                .filename = "mock",
-            },
+            .pos = self.pos,
         };
     }
 
@@ -200,20 +207,12 @@ pub const Lexer = struct {
     fn token_make_operator(self: *Self) LexError!token.Token {
         const c = try self.peek_char();
         const sval = try self.read_op();
-        const tempTokenPos = token.Pos{
-            .col = 1,
-            .line = 1,
-            .start_col = 1,
-            .end_col = 2,
-            .end_line = 2,
-            .filename = "mock",
-        };
 
         return switch (c.?) {
-            '+' => token.Token{ .type = .Plus, .data = .{ .sval = sval }, .pos = tempTokenPos },
-            '-' => token.Token{ .type = .Minus, .data = .{ .sval = sval }, .pos = tempTokenPos },
-            '*' => token.Token{ .type = .Mult, .data = .{ .sval = sval }, .pos = tempTokenPos },
-            '/' => token.Token{ .type = .Div, .data = .{ .sval = sval }, .pos = tempTokenPos },
+            '+' => token.Token{ .type = .Plus, .data = .{ .sval = sval }, .pos = self.pos },
+            '-' => token.Token{ .type = .Minus, .data = .{ .sval = sval }, .pos = self.pos },
+            '*' => token.Token{ .type = .Mult, .data = .{ .sval = sval }, .pos = self.pos },
+            '/' => token.Token{ .type = .Div, .data = .{ .sval = sval }, .pos = self.pos },
             else => undefined,
         };
     }
@@ -231,14 +230,7 @@ pub const Lexer = struct {
             .data = .{
                 .sval = buffer,
             },
-            .pos = token.Pos{
-                .col = 1,
-                .line = 1,
-                .start_col = 1,
-                .end_col = 2,
-                .end_line = 2,
-                .filename = "mock",
-            },
+            .pos = self.pos,
         };
     }
 
@@ -247,14 +239,7 @@ pub const Lexer = struct {
         return token.Token{
             .type = .NewLine,
             .data = .{ .cval = '\n' },
-            .pos = token.Pos{
-                .col = 1,
-                .line = 1,
-                .start_col = 1,
-                .end_col = 2,
-                .end_line = 2,
-                .filename = "mock",
-            },
+            .pos = self.pos,
         };
     }
 
@@ -307,8 +292,15 @@ pub const Lexer = struct {
 
         var t = try self.handle_comment();
 
+        const start_line = self.pos.line;
+        const start_col = self.pos.col;
+
         if (t != null) {
-            t.?.pos.line = 1;
+            t.?.pos.line = start_line;
+            t.?.pos.col = start_col;
+            t.?.pos.start_col = start_col;
+            t.?.pos.end_line = self.pos.line;
+            t.?.pos.end_col = self.pos.col;
             return t;
         }
 
@@ -328,6 +320,14 @@ pub const Lexer = struct {
                     return LexError.InvalidCharacter;
                 }
             },
+        }
+
+        if (t != null) {
+            t.?.pos.line = start_line;
+            t.?.pos.col = start_col;
+            t.?.pos.start_col = start_col;
+            t.?.pos.end_line = self.pos.line;
+            t.?.pos.end_col = self.pos.col;
         }
 
         self.current_token = t;
