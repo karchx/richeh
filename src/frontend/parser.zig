@@ -213,10 +213,9 @@ pub const Parse = struct {
         const op = t.?.data.sval.items;
         const op_pos = t.?.pos;
         var node_left = self.node_peek_expressionable_or_null();
-        if (node_left == null) {
-            _ = self.token_next(); // skip operator
-            _ = self.node_pop();
-        }
+
+        _ = self.token_next(); // skip operator
+        _ = self.node_pop();
 
         node_left.?.flags = .{ .inside_expression = true };
         t = self.token_peek_next();
@@ -302,12 +301,6 @@ pub const Parse = struct {
 
     pub fn parse(self: *Self) ParseError!void {
         self.prescan_forward_type_names();
-        _ = try self.next();
-        _ = try self.next();
-        _ = try self.next();
-        _ = try self.next();
-        _ = try self.next();
-
-        // while (try self.next()) {}
+        while (try self.next()) {}
     }
 };

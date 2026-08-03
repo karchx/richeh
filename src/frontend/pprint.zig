@@ -22,6 +22,11 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
                     try writer.print("Left:\n", .{});
                     try print_node(left.*, writer, depth + 2);
                 }
+                if (node.node_variant.?.exp.right) |right| {
+                    try print_indent(writer, depth + 1);
+                    try writer.print("Right:\n", .{});
+                    try print_node(right.*, writer, depth + 2);
+                }
             }
         },
         .Number => {
