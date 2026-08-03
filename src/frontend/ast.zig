@@ -2,12 +2,23 @@ const std = @import("std");
 const mem = std.mem;
 const token = @import("token.zig");
 
+pub const NodeFlags = packed struct {
+    /// Indicates if the tnode is inside an expression.
+    inside_expression: bool = false,
+
+    /// Indicates if the node has a combined variable.
+    has_variable_combined: bool = false,
+};
+
 pub const NodeType = enum {
     /// Represents an expression node.
     Expression,
 
     /// Represents a number node
     Number,
+
+    /// Represents a unary node.
+    Unary,
 };
 
 pub const BindedNode = struct {
@@ -15,6 +26,7 @@ pub const BindedNode = struct {
 };
 
 pub const Node = struct {
+    flags: ?NodeFlags = null,
     type: NodeType,
     pos: ?token.Pos = null,
     data: ?token.TokenData = null,
@@ -25,6 +37,12 @@ pub const Node = struct {
             left: ?*Node = null,
             right: ?*Node = null,
             op: []const u8,
+        },
+
+        /// The unary node.
+        unary: struct {
+            op: []const u8,
+            operand: *Node,
         },
     } = null,
 };

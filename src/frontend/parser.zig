@@ -29,6 +29,11 @@ pub const Parse = struct {
         };
     }
 
+    fn is_unary_operator(op: []const u8) bool {
+        return mem.eql(u8, "-", op) or mem.eql(u8, "+", op) or
+            mem.eql(u8, "*", op) or mem.eql(u8, "/", op);
+    }
+
     fn ignore_nl_or_comment(self: *Self, t: *?token.Token) void {
         while (t.* != null and token.is_nl_or_comment_or_newline_separator(t.*)) {
             _ = self.lexer_proc.tokens.peek(); // skip token
@@ -57,7 +62,7 @@ pub const Parse = struct {
         }
         if (is_bound) {
             const b = self.lexer_proc.allocator.create(ast.BindedNode) catch {
-                return ParseError.MemoryALlocationFailed;
+                return ParseError.MemoryAllocationFailed;
             };
             errdefer self.lexer_proc.allocator.destroy(b);
             b.*.owner = binded.owner;
@@ -94,6 +99,49 @@ pub const Parse = struct {
         return peek_token;
     }
 
+    /// Peeks at the expressionable node on top of the stack.
+    ///
+    /// This functions returns the node on top of the stack if it is expressionable,
+    /// or `null` otherwise.
+    fn node_peek_expressionable_or_null(self: *Self) ?ast.Node {
+        const n = self.lexer_proc.nodes.back();
+        return if (n != null and ast.node_is_expressionable(n.?)) n.? else null;
+    }
+
+    fn node_pop(self: *Self) ?ast.Node {
+        const last_node = self.lexer_proc.nodes.back();
+        self.lexer_proc.nodes.pop();
+        return last_node;
+    }
+
+    fn make_expression_node(self: *Self, left_node: *ast.Node, right_node: *ast.Node, op: []const u8, op_pos: ?token.Pos) ParseError!void {
+        const exp_node = self.lexer_proc.allocator.create(ast.Node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        defer self.lexer_proc.allocator.destroy(exp_node);
+        const left = self.lexer_proc.allocator.create(ast.Node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        left.* = left_node.*;
+        const right = self.lexer_proc.allocator.create(ast.Node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        errdefer self.lexer_proc.allocator.destroy(right);
+        right.* = right_node.*;
+        exp_node.* = ast.Node{
+            .type = .Expression,
+            .pos = op_pos orelse left.*.pos orelse right.*.pos,
+            .node_variant = .{
+                .exp = .{
+                    .left = left,
+                    .right = right,
+                    .op = op,
+                },
+            },
+        };
+        try self.create_node(exp_node);
+    }
+
     fn parse_single_token_to_node(self: *Self) ParseError!bool {
         const t = self.token_next();
         if (t == null) {
@@ -118,21 +166,48 @@ pub const Parse = struct {
                     },
                 }
             },
+            else => {
+                std.debug.print("[PARSER]: expected single token, got '{s}'", .{@tagName(t.?.type)});
+                return ParseError.InvalidToken;
+            },
         }
         return true;
     }
 
-    /// Peeks at the expressionable node on top of the stack.
-    ///
-    /// This functions returns the node on top of the stack if it is expressionable,
-    /// or `null` otherwise.
-    fn node_peek_expressionable_or_null(self: *Self) ?ast.Node {
-        const n = self.lexer_proc.nodes.back();
-        return if (n != null and ast.node_is_expressionable(n.?)) n.? else null;
+    fn parse_for_normal_unary(self: *Self) ParseError!void {
+        const unary_tok = self.token_next();
+        const unary_op = unary_tok.?.data.sval.items;
+
+        try self.parse_expressionable();
+        const unary_operand_node = self.node_pop() orelse {
+            return ParseError.InvalidOperand;
+        };
+        const operand = self.lexer_proc.allocator.create(ast.Node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        errdefer self.lexer_proc.allocator.destroy(operand);
+        operand.* = unary_operand_node;
+        self.lexer_proc.nodes.push(ast.Node{
+            .type = .Unary,
+            .pos = unary_tok.?.pos,
+            .node_variant = .{
+                .unary = .{
+                    .op = unary_op,
+                    .operand = operand,
+                },
+            },
+        }) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+    }
+
+    fn parse_for_unary(self: *Self) ParseError!void {
+        _ = self.token_peek_next();
+        try self.parse_for_normal_unary();
     }
 
     fn parse_expression(self: *Self) ParseError!bool {
-        const t = self.token_peek_next();
+        var t = self.token_peek_next();
         if (t == null) return false;
 
         const op = t.?.data.sval.items;
@@ -140,8 +215,34 @@ pub const Parse = struct {
         var node_left = self.node_peek_expressionable_or_null();
         if (node_left == null) {
             _ = self.token_next(); // skip operator
-            _ = self.node_pop(); // TODO
+            _ = self.node_pop();
         }
+
+        node_left.?.flags = .{ .inside_expression = true };
+        t = self.token_peek_next();
+        if (t == null) {
+            return ParseError.InvalidOperand;
+        }
+
+        // Operator type
+        if (t.?.type == .Plus or t.?.type == .Minus or t.?.type == .Mult or t.?.type == .Div) {
+            try self.parse_for_unary();
+        } else {
+            try self.parse_expressionable();
+        }
+
+        var node_right = self.node_pop() orelse {
+            return ParseError.InvalidOperand;
+        };
+        node_right.flags = .{ .inside_expression = true };
+        try self.make_expression_node(&node_left.?, &node_right, op, op_pos);
+        const exp_node = self.node_pop() orelse {
+            return ParseError.InvalidExpression;
+        };
+        self.lexer_proc.nodes.push(exp_node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+
         return true;
     }
 
