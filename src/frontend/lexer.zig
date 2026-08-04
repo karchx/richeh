@@ -243,6 +243,26 @@ pub const Lexer = struct {
         };
     }
 
+    /// Creates an identifier or keyword token from the input file.
+    /// It then checks if the collected characters form a keyword or an identifier and
+    /// returns the corresponding token.
+    ///
+    // TODO: validate keywords tokens
+    fn token_make_identifier_or_keyword(self: *Self) LexError!?token.Token {
+        var buffer = ArrayList(u8).init(self.allocator);
+        try self.getc_if(&buffer, struct {
+            fn call(_c: u8) bool {
+                return ascii.isAlphabetic(_c) or ascii.isDigit(_c) or _c == '_';
+            }
+        }.call);
+
+        return token.Token{
+            .type = .Identifier,
+            .data = .{ .sval = buffer },
+            .pos = self.pos,
+        };
+    }
+
     fn handle_comment(self: *Self) LexError!?token.Token {
         const c = try self.peek_char();
         if (c == '-') {
