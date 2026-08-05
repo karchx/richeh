@@ -5,6 +5,10 @@ const lexer = @import("lexer.zig");
 const token = @import("token.zig");
 const LexError = lexer.LexError;
 
+fn ArrayList(comptime T: type) type {
+    return std.array_list.Managed(T);
+}
+
 /// Errors that cant occur during parsing process.
 pub const ParseError = error{
     ///
@@ -12,6 +16,7 @@ pub const ParseError = error{
     InvalidKeyword,
     InvalidToken,
     InvalidOperand,
+    InvalidIdentifier,
 } || LexError;
 
 pub const Parse = struct {
@@ -245,6 +250,30 @@ pub const Parse = struct {
         return true;
     }
 
+    fn parse_variable(self: *Self) ParseError!bool {
+        const ident_token = self.token_next();
+        const t = self.token_peek_next();
+
+        if (ident_token == null or ident_token.?.type != .Identifier) {
+            std.debug.print("expected identifier\n", .{});
+            return ParseError.InvalidIdentifier;
+        }
+
+        // Variable node.
+        var name = ArrayList(u8).initCapacity(self.lexer_proc.allocator, ident_token.?.data.sval.items.len) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        errdefer name.deinit();
+        name.appendSlice(ident_token.?.data.sval.items) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        // var value_node: ?ast.Node = null;
+        const has_value = token.is_operator(t, "=");
+        std.debug.print("Token: {s}\n", .{t.?.data.sval.items});
+        std.debug.print("has value, {}\n", .{has_value});
+        return true;
+    }
+
     fn parse_expressionable_single(self: *Self) ParseError!bool {
         // TODO: validation expr depth and max parse expr depth
         const t = self.token_peek_next();
@@ -255,6 +284,7 @@ pub const Parse = struct {
         return switch (t.?.type) {
             .Number => try self.parse_single_token_to_node(),
             .Plus, .Minus, .Mult, .Div => try self.parse_expression(),
+            .Identifier => try self.parse_variable(),
             else => false,
         };
     }

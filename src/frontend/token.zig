@@ -66,8 +66,8 @@ pub fn is_operator(token: ?Token, val: []const u8) bool {
 
     if (!mem.eql(u8, token.?.data.sval.items, val)) return false;
 
-    return switch (t.?.type) {
-        .Plus, .Div, .Mult, .Minus => true,
+    return switch (t.type) {
+        .Plus, .Div, .Mult, .Minus, .Equal => true,
         else => false,
     };
 }

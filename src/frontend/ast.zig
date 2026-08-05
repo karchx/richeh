@@ -2,6 +2,11 @@ const std = @import("std");
 const mem = std.mem;
 const token = @import("token.zig");
 
+/// Compatibility shim: ArrayList with embedded allocator (old-style managed API).
+fn ArrayList(comptime T: type) type {
+    return std.array_list.Managed(T);
+}
+
 pub const NodeFlags = packed struct {
     /// Indicates if the tnode is inside an expression.
     inside_expression: bool = false,
@@ -13,12 +18,12 @@ pub const NodeFlags = packed struct {
 pub const NodeType = enum {
     /// Represents an expression node.
     Expression,
-
     /// Represents a number node
     Number,
-
     /// Represents a unary node.
     Unary,
+    /// Represents a variable node.
+    Variable,
 };
 
 pub const BindedNode = struct {
@@ -44,6 +49,12 @@ pub const Node = struct {
             op: []const u8,
             operand: *Node,
         },
+
+        /// The variable node.
+        variable: struct {
+            name: ArrayList(u8),
+            val: ?*Node = null
+        }
     } = null,
 };
 
