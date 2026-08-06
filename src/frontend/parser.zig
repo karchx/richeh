@@ -5,6 +5,10 @@ const lexer = @import("lexer.zig");
 const token = @import("token.zig");
 const LexError = lexer.LexError;
 
+fn ArrayList(comptime T: type) type {
+    return std.array_list.Managed(T);
+}
+
 /// Errors that cant occur during parsing process.
 pub const ParseError = error{
     ///
@@ -12,6 +16,7 @@ pub const ParseError = error{
     InvalidKeyword,
     InvalidToken,
     InvalidOperand,
+    InvalidIdentifier,
 } || LexError;
 
 pub const Parse = struct {
@@ -255,12 +260,78 @@ pub const Parse = struct {
         return switch (t.?.type) {
             .Number => try self.parse_single_token_to_node(),
             .Plus, .Minus, .Mult, .Div => try self.parse_expression(),
+            .Identifier => try self.parse_variable(),
             else => false,
         };
     }
 
     fn parse_expressionable(self: *Self) ParseError!void {
         while (try self.parse_expressionable_single()) {}
+    }
+
+    fn parse_expressionable_root(self: *Self) ParseError!void {
+        try self.parse_expressionable();
+        const n = self.node_pop() orelse {
+            std.debug.print("expected expression", .{});
+            return ParseError.InvalidExpression;
+        };
+        self.lexer_proc.nodes.push(n) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+    }
+
+    fn parse_variable(self: *Self) ParseError!bool {
+        const ident_token = self.token_next();
+        const t = self.token_peek_next();
+
+        if (ident_token == null or ident_token.?.type != .Identifier) {
+            std.debug.print("expected identifier\n", .{});
+            return ParseError.InvalidIdentifier;
+        }
+
+        // Variable node.
+        var name = ArrayList(u8).initCapacity(self.lexer_proc.allocator, ident_token.?.data.sval.items.len) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        errdefer name.deinit();
+        name.appendSlice(ident_token.?.data.sval.items) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        var value_node: ?ast.Node = null;
+        const has_value = token.is_operator(t, "=");
+        if (has_value) {
+            _ = self.token_next();
+            try self.parse_expressionable_root();
+            value_node = self.node_pop();
+            const val = self.lexer_proc.allocator.create(ast.Node) catch {
+                return ParseError.MemoryAllocationFailed;
+            };
+            errdefer self.lexer_proc.allocator.destroy(val);
+            val.* = value_node.?;
+            const node = self.lexer_proc.allocator.create(ast.Node) catch {
+                return ParseError.MemoryAllocationFailed;
+            };
+            errdefer {
+                self.lexer_proc.allocator.destroy(node);
+            }
+
+            node.* = ast.Node{
+                .type = .Variable,
+                .pos = ident_token.?.pos,
+                .node_variant = .{
+                    .variable = .{
+                        .name = name,
+                        .val = val,
+                    },
+                },
+            };
+
+            name = ArrayList(u8).init(self.lexer_proc.allocator);
+            self.lexer_proc.nodes.push(node.*) catch {
+                return ParseError.MemoryAllocationFailed;
+            };
+        }
+        return true;
     }
 
     fn next(self: *Self) ParseError!bool {

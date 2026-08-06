@@ -213,6 +213,7 @@ pub const Lexer = struct {
             '-' => token.Token{ .type = .Minus, .data = .{ .sval = sval }, .pos = self.pos },
             '*' => token.Token{ .type = .Mult, .data = .{ .sval = sval }, .pos = self.pos },
             '/' => token.Token{ .type = .Div, .data = .{ .sval = sval }, .pos = self.pos },
+            '=' => token.Token{ .type = .Equal, .data = .{ .sval = sval }, .pos = self.pos },
             else => undefined,
         };
     }
@@ -298,7 +299,7 @@ pub const Lexer = struct {
         }
 
         if (ascii.isAlphabetic(c.?) or c.? == '_') {
-            return null;
+            return self.token_make_identifier_or_keyword();
         }
         return null;
     }
@@ -330,7 +331,7 @@ pub const Lexer = struct {
         }
 
         switch (c.?) {
-            '+', '-', '*', '/' => t = try self.token_make_operator(),
+            '+', '-', '*', '/', '=' => t = try self.token_make_operator(),
             '0'...'9' => t = try self.token_make_number(),
             '\n' => t = try self.token_make_newline(),
             ' ', '\t', '\r' => t = try self.handle_whitespace(),

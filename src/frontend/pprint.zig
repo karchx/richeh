@@ -44,5 +44,18 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
                 try print_node(node.node_variant.?.unary.operand.*, writer, depth + 2);
             }
         },
+        .Variable => {
+            if (node.node_variant.?.variable.name.items.len > 0) {
+                try print_indent(writer, depth + 1);
+                try writer.print("Name {s}\n", .{node.node_variant.?.variable.name.items});
+            }
+
+            if (node.node_variant.?.variable.val) |val| {
+                try print_indent(writer, depth + 1);
+                try writer.print("Value:\n", .{});
+                try print_node(val.*, writer, depth + 2);
+            }
+
+        }
     }
 }
