@@ -64,7 +64,9 @@ pub const Token = struct {
 pub fn is_operator(token: ?Token, val: []const u8) bool {
     const t = token orelse return false;
 
-    if (!mem.eql(u8, token.?.data.sval.items, val)) return false;
+    const trim_items = std.mem.trim(u8, t.data.sval.items, " \t\r\n\x00");
+
+    if (!mem.eql(u8, trim_items, val)) return false;
 
     return switch (t.type) {
         .Plus, .Div, .Mult, .Minus, .Equal => true,
