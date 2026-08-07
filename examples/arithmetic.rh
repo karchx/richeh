@@ -1,6 +1,4 @@
 -- this is comment
 x = 50
-y = 40
 
-x * 2
-y + 60
+2 * x

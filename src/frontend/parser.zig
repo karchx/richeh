@@ -3,6 +3,7 @@ const mem = std.mem;
 const ast = @import("ast.zig");
 const lexer = @import("lexer.zig");
 const token = @import("token.zig");
+const op_table = @import("operator_precedence.zig");
 const LexError = lexer.LexError;
 
 fn ArrayList(comptime T: type) type {
@@ -211,10 +212,149 @@ pub const Parse = struct {
         try self.parse_for_normal_unary();
     }
 
-    fn parse_expression(self: *Self) ParseError!bool {
-        var t = self.token_peek_next();
-        if (t == null) return false;
+    fn parse_get_precedence_for_operator(_: *Self, op: []const u8, group: *?op_table.OpPrecedenceGroup) i8 {
+        for (0..op_table.TOTAL_OPERATORS_GROUP) |i| {
+            var j: u8 = 0;
+            while (op_table.op_precedence[i].operators[j] != null) {
+                const _op = op_table.op_precedence[i].operators[j];
+                if (mem.eql(u8, _op.?, op)) {
+                    group.* = op_table.op_precedence[i];
+                    return @intCast(i);
+                }
+                j += 1;
+            }
+        }
+        return -1;
+    }
 
+    fn parse_left_has_priority(self: *Self, op_left: []const u8, op_right: []const u8) bool {
+        var left_group: ?op_table.OpPrecedenceGroup = null;
+        var right_group: ?op_table.OpPrecedenceGroup = null;
+        const left_prec = self.parse_get_precedence_for_operator(op_left, &left_group);
+        const right_prec = self.parse_get_precedence_for_operator(op_right, &right_group);
+
+        if (mem.eql(u8, op_left, op_right)) {
+            return left_group.?.associativity == .LeftToRight;
+        }
+        if (left_group.?.associativity == .RightToLeft) {
+            return false;
+        }
+        return left_prec <= right_prec;
+    }
+
+    /// Shifts the children of an epxression node to the left.
+    ///
+    /// This function rearranges the children of the given expression node,
+    /// shifting them to the left to maintain proper precedence order.
+    fn parse_node_shift_children_left(self: *Self, node: *ast.Node) ParseError!void {
+        const exp = &node.*.node_variant.?.exp;
+        const right_expr_ptr = exp.right orelse return;
+        if (right_expr_ptr.*.type != .Expression) return;
+
+        const right_exp = &right_expr_ptr.*.node_variant.?.exp;
+        const op2 = right_exp.op;
+
+        const a_ptr = exp.left orelse return;
+        const b_ptr = right_exp.left orelse return;
+        const c_ptr = right_exp.right orelse return;
+
+        const new_left_expr = self.lexer_proc.allocator.create(ast.Node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        errdefer self.lexer_proc.allocator.destroy(new_left_expr);
+        new_left_expr.* = ast.Node{
+            .type = .Expression,
+            .pos = node.*.pos,
+            .binded = null,
+            .node_variant = .{
+                .exp = .{
+                    .left = a_ptr,
+                    .right = b_ptr,
+                    .op = exp.op,
+                },
+            },
+        };
+
+        exp.left = new_left_expr;
+        exp.right = c_ptr;
+        exp.op = op2;
+
+        right_exp.left = null;
+        right_exp.right = null;
+        self.lexer_proc.allocator.destroy(right_expr_ptr);
+    }
+
+    fn parse_node_move_right_left_to_left(self: *Self, node: *ast.Node) ParseError!void {
+        const exp = &node.*.node_variant.?.exp;
+        const right_expr_ptr = exp.right orelse return;
+        if (right_expr_ptr.*.type != .Expression) return;
+
+        const right_exp = &right_expr_ptr.*.node_variant.?.exp;
+        const op2 = right_exp.op;
+
+        const a_ptr = exp.left orelse return;
+        const b_ptr = right_exp.left orelse return;
+        const c_ptr = right_exp.right orelse return;
+
+        const completed = self.lexer_proc.allocator.create(ast.Node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        errdefer self.lexer_proc.allocator.destroy(completed);
+        completed.* = ast.Node{
+            .type = .Expression,
+            .pos = node.*.pos,
+            .binded = null,
+            .node_variant = .{
+                .exp = .{
+                    .left = a_ptr,
+                    .right = b_ptr,
+                    .op = exp.op,
+                },
+            },
+        };
+
+        exp.left = completed;
+        exp.right = c_ptr;
+        exp.op = op2;
+
+        right_exp.left = null;
+        right_exp.right = null;
+        self.lexer_proc.allocator.destroy(right_expr_ptr);
+    }
+
+    /// Reorders an expression node for proper precedence.
+    ///
+    /// This function recursively reorders the children of the given expression node
+    /// to maintain proper operator precedence.
+    fn parse_reorder_expression(self: *Self, node: *ast.Node) ParseError!void {
+        if (node.*.type != .Expression) return;
+        if (node.*.node_variant != null and node.*.node_variant.?.exp.left.?.*.type != .Expression and node.*.node_variant.?.exp.right != null and
+            node.*.node_variant.?.exp.right.?.*.type != .Expression)
+        {
+            return;
+        }
+
+        if (node.*.node_variant != null and node.*.node_variant.?.exp.right != null and
+            node.*.node_variant.?.exp.right.?.*.type == .Expression)
+        {
+            const right_op = node.*.node_variant.?.exp.right.?.*.node_variant.?.exp.op;
+            if (self.parse_left_has_priority(node.*.node_variant.?.exp.op, right_op)) {
+                try self.parse_node_shift_children_left(node);
+                try self.parse_reorder_expression(node.*.node_variant.?.exp.left.?);
+                try self.parse_reorder_expression(node.*.node_variant.?.exp.right.?);
+            }
+        }
+        if (node.*.node_variant.?.exp.left != null and node.*.node_variant.?.exp.right != null and ast.node_is_assignment(node.*.node_variant.?.exp.right.?.*)) {
+            try self.parse_node_move_right_left_to_left(node);
+        }
+    }
+
+    fn parse_normal_expression(self: *Self) ParseError!void {
+        var t = self.token_peek_next();
+        if (t == null) {
+            std.debug.print("expected operator in expression", .{});
+            return ParseError.InvalidExpression;
+        }
         const op = t.?.data.sval.items;
         const op_pos = t.?.pos;
         var node_left = self.node_peek_expressionable_or_null();
@@ -225,11 +365,12 @@ pub const Parse = struct {
         node_left.?.flags = .{ .inside_expression = true };
         t = self.token_peek_next();
         if (t == null) {
+            std.debug.print("expected expressionable for '{s}' operator", .{op});
             return ParseError.InvalidOperand;
         }
 
         // Operator type
-        if (t.?.type == .Plus or t.?.type == .Minus or t.?.type == .Mult or t.?.type == .Div) {
+        if (t.?.type == .Plus or t.?.type == .Minus or t.?.type == .Mult or t.?.type == .Div or t.?.type == .Equal) {
             try self.parse_for_unary();
         } else {
             try self.parse_expressionable();
@@ -240,12 +381,20 @@ pub const Parse = struct {
         };
         node_right.flags = .{ .inside_expression = true };
         try self.make_expression_node(&node_left.?, &node_right, op, op_pos);
-        const exp_node = self.node_pop() orelse {
+        var exp_node = self.node_pop() orelse {
             return ParseError.InvalidExpression;
         };
+        try self.parse_reorder_expression(&exp_node);
         self.lexer_proc.nodes.push(exp_node) catch {
             return ParseError.MemoryAllocationFailed;
         };
+    }
+
+    fn parse_expression(self: *Self) ParseError!bool {
+        const t = self.token_peek_next();
+        if (t == null) return false;
+
+        try self.parse_normal_expression();
 
         return true;
     }

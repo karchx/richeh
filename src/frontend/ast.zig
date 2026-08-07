@@ -20,10 +20,14 @@ pub const NodeType = enum {
     Expression,
     /// Represents a number node
     Number,
+    /// Represents an identifier node.
+    Identifier,
     /// Represents a unary node.
     Unary,
     /// Represents a variable node.
     Variable,
+    ///  Represents a default statement.
+    Statement,
 };
 
 pub const BindedNode = struct {
@@ -51,10 +55,7 @@ pub const Node = struct {
         },
 
         /// The variable node.
-        variable: struct {
-            name: ArrayList(u8),
-            val: ?*Node = null
-        }
+        variable: struct { name: ArrayList(u8), val: ?*Node = null },
     } = null,
 };
 
@@ -64,6 +65,15 @@ pub const Node = struct {
 /// - Number
 pub fn node_is_value_type(n: Node) bool {
     return n.type == .Number;
+}
+
+pub fn node_is_assignment(n: Node) bool {
+    if (n.type != .Expression) {
+        return false;
+    }
+
+    const op = n.node_variant.?.exp.op;
+    return mem.eql(u8, "=", op);
 }
 
 pub fn node_is_expressionable(n: Node) bool {
