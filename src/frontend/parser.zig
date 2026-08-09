@@ -18,14 +18,13 @@ pub const ParseError = error{
     InvalidToken,
     InvalidOperand,
     InvalidIdentifier,
+    InvalidAssignment,
     UnexpectedEOF,
 } || LexError;
 
 pub const Parse = struct {
     lexer_proc: *lexer.Lexer,
     parser_last_token: token.Token = undefined,
-    parser_current_body: ?ast.Node = null,
-    forward_type_names: ?std.StringHashMap(void) = null,
 
     const Self = @This();
 
@@ -106,6 +105,27 @@ pub const Parse = struct {
         };
     }
 
+    fn create_variable_node(self: *Self, left: ast.Node, right: ast.Node) ParseError!ast.Node {
+        const right_ptr = self.lexer_proc.allocator.create(ast.Node) catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+        right_ptr.* = right;
+
+        const ident_name = left.data.?.sval;
+
+        return ast.Node{
+            .type = .Variable,
+            .pos = left.pos,
+            .data = null,
+            .node_variant = .{
+                .variable = .{
+                    .name = ident_name,
+                    .val = right_ptr,
+                },
+            },
+        };
+    }
+
     fn parse_expr(self: *Self, min_bp: u8) ParseError!ast.Node {
         const tok = self.token_next() orelse return ParseError.UnexpectedEOF;
 
@@ -124,9 +144,15 @@ pub const Parse = struct {
             // consume token
             _ = self.token_next();
             switch (next_token.type) {
-                .Plus, .Minus, .Mult, .Div, .Equal => {
+                .Plus, .Minus, .Mult, .Div => {
                     const right = try self.parse_expr(bp.right);
                     left = try self.create_binary_node(next_token.data.sval.items, left, right);
+                },
+                .Equal => {
+                    if (left.type != .Identifier) return ParseError.InvalidAssignment;
+
+                    const right = try self.parse_expr(bp.right);
+                    left = try self.create_variable_node(left, right);
                 },
                 else => unreachable,
             }
@@ -154,28 +180,7 @@ pub const Parse = struct {
         return true;
     }
 
-    /// This function repeatedly processes tokens until there are no more tokens
-    /// to process.
-    fn prescan_forward_type_names(self: *Self) void {
-        if (self.forward_type_names != null) return;
-        var set = std.StringHashMap(void).init(self.lexer_proc.allocator);
-        const items = self.lexer_proc.tokens.items();
-        var i: usize = 0;
-        while (i < items.len) : (i += 1) {
-            var j = i + 1;
-            while (j < items.len) : (j += 1) {}
-            if (j < items.len and items[j].type == .Identifier) {
-                set.put(items[j].data.sval.items, {}) catch {
-                    set.deinit();
-                    return;
-                };
-            }
-        }
-        self.forward_type_names = set;
-    }
-
     pub fn parse(self: *Self) ParseError!void {
-        self.prescan_forward_type_names();
         while (try self.next()) {}
     }
 };
