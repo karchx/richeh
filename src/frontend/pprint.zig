@@ -41,6 +41,16 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
                 try print_node(val.*, writer, depth + 2);
             }
         },
+        .Identifier => {
+            if (node.data) |data| {
+                try print_indent(writer, depth + 1);
+                try writer.print("Name: {s}\n", .{data.sval.items});
+            }
+        },
+        .Statement => {
+            try print_indent(writer, depth + 1);
+            try writer.print("Statement\n", .{});
+        },
         .Number => {
             if (node.data) |data| {
                 try print_indent(writer, depth + 1);

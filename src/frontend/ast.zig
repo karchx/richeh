@@ -7,14 +7,6 @@ fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
 }
 
-pub const NodeFlags = packed struct {
-    /// Indicates if the tnode is inside an expression.
-    inside_expression: bool = false,
-
-    /// Indicates if the node has a combined variable.
-    has_variable_combined: bool = false,
-};
-
 pub const NodeType = enum {
     /// Represents an expression node.
     Expression,
@@ -30,16 +22,10 @@ pub const NodeType = enum {
     Statement,
 };
 
-pub const BindedNode = struct {
-    owner: ?*Node,
-};
-
 pub const Node = struct {
-    flags: ?NodeFlags = null,
     type: NodeType,
     pos: ?token.Pos = null,
     data: ?token.TokenData = null,
-    binded: ?*BindedNode = null,
     node_variant: ?union(enum) {
         /// The expresion node.
         exp: struct {

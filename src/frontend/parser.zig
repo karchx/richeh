@@ -18,6 +18,7 @@ pub const ParseError = error{
     InvalidToken,
     InvalidOperand,
     InvalidIdentifier,
+    UnexpectedEOF,
 } || LexError;
 
 pub const Parse = struct {
@@ -25,7 +26,6 @@ pub const Parse = struct {
     parser_last_token: token.Token = undefined,
     parser_current_body: ?ast.Node = null,
     forward_type_names: ?std.StringHashMap(void) = null,
-    // TODO: change nodes to codegen or another module (?
 
     const Self = @This();
 
@@ -35,51 +35,11 @@ pub const Parse = struct {
         };
     }
 
-    fn is_unary_operator(op: []const u8) bool {
-        return mem.eql(u8, "-", op) or mem.eql(u8, "+", op) or
-            mem.eql(u8, "*", op) or mem.eql(u8, "/", op);
-    }
-
     fn ignore_nl_or_comment(self: *Self, t: *?token.Token) void {
         while (t.* != null and token.is_nl_or_comment_or_newline_separator(t.*)) {
             _ = self.lexer_proc.tokens.peek(); // skip token
             t.* = self.lexer_proc.tokens.peek_no_increment();
         }
-    }
-
-    fn create_node(self: *Self, n: *ast.Node) ParseError!void {
-        var is_bound = false;
-        var binded: ast.BindedNode = .{
-            .owner = null,
-        };
-
-        if (self.parser_current_body) |body| {
-            if (body.binded != null) {
-                const owner = self.lexer_proc.allocator.create(ast.Node) catch {
-                    return ParseError.MemoryAllocationFailed;
-                };
-                errdefer self.lexer_proc.allocator.destroy(owner);
-                owner.* = body;
-                owner.*.binded = null;
-                owner.*.data = null;
-                binded.owner = owner;
-                is_bound = true;
-            }
-        }
-        if (is_bound) {
-            const b = self.lexer_proc.allocator.create(ast.BindedNode) catch {
-                return ParseError.MemoryAllocationFailed;
-            };
-            errdefer self.lexer_proc.allocator.destroy(b);
-            b.*.owner = binded.owner;
-            n.binded = b;
-        } else {
-            n.binded = null;
-        }
-
-        self.lexer_proc.nodes.push(n.*) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
     }
 
     /// Retrieves the next token.
@@ -105,397 +65,92 @@ pub const Parse = struct {
         return peek_token;
     }
 
-    /// Peeks at the expressionable node on top of the stack.
-    ///
-    /// This functions returns the node on top of the stack if it is expressionable,
-    /// or `null` otherwise.
-    fn node_peek_expressionable_or_null(self: *Self) ?ast.Node {
-        const n = self.lexer_proc.nodes.back();
-        return if (n != null and ast.node_is_expressionable(n.?)) n.? else null;
+    fn create_identifier_node(_: *Self, tok: token.Token) ParseError!ast.Node {
+        return ast.Node{
+            .type = .Identifier,
+            .pos = tok.pos,
+            .data = tok.data,
+            .node_variant = null,
+        };
     }
 
-    fn node_pop(self: *Self) ?ast.Node {
-        const last_node = self.lexer_proc.nodes.back();
-        self.lexer_proc.nodes.pop();
-        return last_node;
+    fn create_number_node(_: *Self, tok: token.Token) ParseError!ast.Node {
+        return ast.Node{
+            .type = .Number,
+            .pos = tok.pos,
+            .data = tok.data,
+            .node_variant = null,
+        };
     }
 
-    fn make_expression_node(self: *Self, left_node: *ast.Node, right_node: *ast.Node, op: []const u8, op_pos: ?token.Pos) ParseError!void {
-        const exp_node = self.lexer_proc.allocator.create(ast.Node) catch {
+    fn create_binary_node(self: *Self, op_str: []const u8, left: ast.Node, right: ast.Node) ParseError!ast.Node {
+        const left_ptr = self.lexer_proc.allocator.create(ast.Node) catch {
             return ParseError.MemoryAllocationFailed;
         };
-        defer self.lexer_proc.allocator.destroy(exp_node);
-        const left = self.lexer_proc.allocator.create(ast.Node) catch {
+        left_ptr.* = left;
+
+        const right_ptr = self.lexer_proc.allocator.create(ast.Node) catch {
             return ParseError.MemoryAllocationFailed;
         };
-        left.* = left_node.*;
-        const right = self.lexer_proc.allocator.create(ast.Node) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-        errdefer self.lexer_proc.allocator.destroy(right);
-        right.* = right_node.*;
-        exp_node.* = ast.Node{
+        right_ptr.* = right;
+
+        return ast.Node{
             .type = .Expression,
-            .pos = op_pos orelse left.*.pos orelse right.*.pos,
             .node_variant = .{
                 .exp = .{
-                    .left = left,
-                    .right = right,
-                    .op = op,
+                    .left = left_ptr,
+                    .right = right_ptr,
+                    .op = op_str,
                 },
             },
         };
-        try self.create_node(exp_node);
     }
 
-    fn parse_single_token_to_node(self: *Self) ParseError!bool {
-        const t = self.token_next();
-        if (t == null) {
-            std.debug.print("expected token, got eof\n", .{});
-            return ParseError.InvalidToken;
-        }
+    fn parse_expr(self: *Self, min_bp: u8) ParseError!ast.Node {
+        const tok = self.token_next() orelse return ParseError.UnexpectedEOF;
 
-        switch (t.?.type) {
-            .Number => {
-                switch (t.?.data) {
-                    .llnum => |n| {
-                        var number_node = ast.Node{
-                            .type = .Number,
-                            .pos = t.?.pos,
-                            .data = .{ .llnum = n },
-                        };
-                        try self.create_node(&number_node);
-                    },
-                    else => {
-                        std.debug.print("invalid number token\n", .{});
-                        return ParseError.InvalidToken;
-                    },
-                }
-            },
-            else => {
-                std.debug.print("[PARSER]: expected single token, got '{s}'", .{@tagName(t.?.type)});
-                return ParseError.InvalidToken;
-            },
-        }
-        return true;
-    }
-
-    fn parse_for_normal_unary(self: *Self) ParseError!void {
-        const unary_tok = self.token_next();
-        const unary_op = unary_tok.?.data.sval.items;
-
-        try self.parse_expressionable();
-        const unary_operand_node = self.node_pop() orelse {
-            return ParseError.InvalidOperand;
-        };
-        const operand = self.lexer_proc.allocator.create(ast.Node) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-        errdefer self.lexer_proc.allocator.destroy(operand);
-        operand.* = unary_operand_node;
-        self.lexer_proc.nodes.push(ast.Node{
-            .type = .Unary,
-            .pos = unary_tok.?.pos,
-            .node_variant = .{
-                .unary = .{
-                    .op = unary_op,
-                    .operand = operand,
-                },
-            },
-        }) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-    }
-
-    fn parse_for_unary(self: *Self) ParseError!void {
-        _ = self.token_peek_next();
-        try self.parse_for_normal_unary();
-    }
-
-    fn parse_get_precedence_for_operator(_: *Self, op: []const u8, group: *?op_table.OpPrecedenceGroup) i8 {
-        for (0..op_table.TOTAL_OPERATORS_GROUP) |i| {
-            var j: u8 = 0;
-            while (op_table.op_precedence[i].operators[j] != null) {
-                const _op = op_table.op_precedence[i].operators[j];
-                if (mem.eql(u8, _op.?, op)) {
-                    group.* = op_table.op_precedence[i];
-                    return @intCast(i);
-                }
-                j += 1;
-            }
-        }
-        return -1;
-    }
-
-    fn parse_left_has_priority(self: *Self, op_left: []const u8, op_right: []const u8) bool {
-        var left_group: ?op_table.OpPrecedenceGroup = null;
-        var right_group: ?op_table.OpPrecedenceGroup = null;
-        const left_prec = self.parse_get_precedence_for_operator(op_left, &left_group);
-        const right_prec = self.parse_get_precedence_for_operator(op_right, &right_group);
-
-        if (mem.eql(u8, op_left, op_right)) {
-            return left_group.?.associativity == .LeftToRight;
-        }
-        if (left_group.?.associativity == .RightToLeft) {
-            return false;
-        }
-        return left_prec <= right_prec;
-    }
-
-    /// Shifts the children of an epxression node to the left.
-    ///
-    /// This function rearranges the children of the given expression node,
-    /// shifting them to the left to maintain proper precedence order.
-    fn parse_node_shift_children_left(self: *Self, node: *ast.Node) ParseError!void {
-        const exp = &node.*.node_variant.?.exp;
-        const right_expr_ptr = exp.right orelse return;
-        if (right_expr_ptr.*.type != .Expression) return;
-
-        const right_exp = &right_expr_ptr.*.node_variant.?.exp;
-        const op2 = right_exp.op;
-
-        const a_ptr = exp.left orelse return;
-        const b_ptr = right_exp.left orelse return;
-        const c_ptr = right_exp.right orelse return;
-
-        const new_left_expr = self.lexer_proc.allocator.create(ast.Node) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-        errdefer self.lexer_proc.allocator.destroy(new_left_expr);
-        new_left_expr.* = ast.Node{
-            .type = .Expression,
-            .pos = node.*.pos,
-            .binded = null,
-            .node_variant = .{
-                .exp = .{
-                    .left = a_ptr,
-                    .right = b_ptr,
-                    .op = exp.op,
-                },
-            },
+        var left = try switch (tok.type) {
+            .Number => self.create_number_node(tok),
+            .Identifier => self.create_identifier_node(tok),
+            else => return ParseError.InvalidToken,
         };
 
-        exp.left = new_left_expr;
-        exp.right = c_ptr;
-        exp.op = op2;
+        while (true) {
+            const next_token = self.token_peek_next() orelse break;
+            const bp = op_table.get_infix_bp(next_token.type) orelse break;
 
-        right_exp.left = null;
-        right_exp.right = null;
-        self.lexer_proc.allocator.destroy(right_expr_ptr);
-    }
+            if (bp.left < min_bp) break;
 
-    fn parse_node_move_right_left_to_left(self: *Self, node: *ast.Node) ParseError!void {
-        const exp = &node.*.node_variant.?.exp;
-        const right_expr_ptr = exp.right orelse return;
-        if (right_expr_ptr.*.type != .Expression) return;
-
-        const right_exp = &right_expr_ptr.*.node_variant.?.exp;
-        const op2 = right_exp.op;
-
-        const a_ptr = exp.left orelse return;
-        const b_ptr = right_exp.left orelse return;
-        const c_ptr = right_exp.right orelse return;
-
-        const completed = self.lexer_proc.allocator.create(ast.Node) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-        errdefer self.lexer_proc.allocator.destroy(completed);
-        completed.* = ast.Node{
-            .type = .Expression,
-            .pos = node.*.pos,
-            .binded = null,
-            .node_variant = .{
-                .exp = .{
-                    .left = a_ptr,
-                    .right = b_ptr,
-                    .op = exp.op,
-                },
-            },
-        };
-
-        exp.left = completed;
-        exp.right = c_ptr;
-        exp.op = op2;
-
-        right_exp.left = null;
-        right_exp.right = null;
-        self.lexer_proc.allocator.destroy(right_expr_ptr);
-    }
-
-    /// Reorders an expression node for proper precedence.
-    ///
-    /// This function recursively reorders the children of the given expression node
-    /// to maintain proper operator precedence.
-    fn parse_reorder_expression(self: *Self, node: *ast.Node) ParseError!void {
-        if (node.*.type != .Expression) return;
-        if (node.*.node_variant != null and node.*.node_variant.?.exp.left.?.*.type != .Expression and node.*.node_variant.?.exp.right != null and
-            node.*.node_variant.?.exp.right.?.*.type != .Expression)
-        {
-            return;
-        }
-
-        if (node.*.node_variant != null and node.*.node_variant.?.exp.right != null and
-            node.*.node_variant.?.exp.right.?.*.type == .Expression)
-        {
-            const right_op = node.*.node_variant.?.exp.right.?.*.node_variant.?.exp.op;
-            if (self.parse_left_has_priority(node.*.node_variant.?.exp.op, right_op)) {
-                try self.parse_node_shift_children_left(node);
-                try self.parse_reorder_expression(node.*.node_variant.?.exp.left.?);
-                try self.parse_reorder_expression(node.*.node_variant.?.exp.right.?);
-            }
-        }
-        if (node.*.node_variant.?.exp.left != null and node.*.node_variant.?.exp.right != null and ast.node_is_assignment(node.*.node_variant.?.exp.right.?.*)) {
-            try self.parse_node_move_right_left_to_left(node);
-        }
-    }
-
-    fn parse_normal_expression(self: *Self) ParseError!void {
-        var t = self.token_peek_next();
-        if (t == null) {
-            std.debug.print("expected operator in expression", .{});
-            return ParseError.InvalidExpression;
-        }
-        const op = t.?.data.sval.items;
-        const op_pos = t.?.pos;
-        var node_left = self.node_peek_expressionable_or_null();
-
-        _ = self.token_next(); // skip operator
-        _ = self.node_pop();
-
-        node_left.?.flags = .{ .inside_expression = true };
-        t = self.token_peek_next();
-        if (t == null) {
-            std.debug.print("expected expressionable for '{s}' operator", .{op});
-            return ParseError.InvalidOperand;
-        }
-
-        // Operator type
-        if (t.?.type == .Plus or t.?.type == .Minus or t.?.type == .Mult or t.?.type == .Div or t.?.type == .Equal) {
-            try self.parse_for_unary();
-        } else {
-            try self.parse_expressionable();
-        }
-
-        var node_right = self.node_pop() orelse {
-            return ParseError.InvalidOperand;
-        };
-        node_right.flags = .{ .inside_expression = true };
-        try self.make_expression_node(&node_left.?, &node_right, op, op_pos);
-        var exp_node = self.node_pop() orelse {
-            return ParseError.InvalidExpression;
-        };
-        try self.parse_reorder_expression(&exp_node);
-        self.lexer_proc.nodes.push(exp_node) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-    }
-
-    fn parse_expression(self: *Self) ParseError!bool {
-        const t = self.token_peek_next();
-        if (t == null) return false;
-
-        try self.parse_normal_expression();
-
-        return true;
-    }
-
-    fn parse_expressionable_single(self: *Self) ParseError!bool {
-        // TODO: validation expr depth and max parse expr depth
-        const t = self.token_peek_next();
-        if (t == null) {
-            return false;
-        }
-
-        return switch (t.?.type) {
-            .Number => try self.parse_single_token_to_node(),
-            .Plus, .Minus, .Mult, .Div => try self.parse_expression(),
-            .Identifier => try self.parse_variable(),
-            else => false,
-        };
-    }
-
-    fn parse_expressionable(self: *Self) ParseError!void {
-        while (try self.parse_expressionable_single()) {}
-    }
-
-    fn parse_expressionable_root(self: *Self) ParseError!void {
-        try self.parse_expressionable();
-        const n = self.node_pop() orelse {
-            std.debug.print("expected expression", .{});
-            return ParseError.InvalidExpression;
-        };
-        self.lexer_proc.nodes.push(n) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-    }
-
-    fn parse_variable(self: *Self) ParseError!bool {
-        const ident_token = self.token_next();
-        const t = self.token_peek_next();
-
-        if (ident_token == null or ident_token.?.type != .Identifier) {
-            std.debug.print("expected identifier\n", .{});
-            return ParseError.InvalidIdentifier;
-        }
-
-        // Variable node.
-        var name = ArrayList(u8).initCapacity(self.lexer_proc.allocator, ident_token.?.data.sval.items.len) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-        errdefer name.deinit();
-        name.appendSlice(ident_token.?.data.sval.items) catch {
-            return ParseError.MemoryAllocationFailed;
-        };
-        var value_node: ?ast.Node = null;
-        const has_value = token.is_operator(t, "=");
-        if (has_value) {
+            // consume token
             _ = self.token_next();
-            try self.parse_expressionable_root();
-            value_node = self.node_pop();
-            const val = self.lexer_proc.allocator.create(ast.Node) catch {
-                return ParseError.MemoryAllocationFailed;
-            };
-            errdefer self.lexer_proc.allocator.destroy(val);
-            val.* = value_node.?;
-            const node = self.lexer_proc.allocator.create(ast.Node) catch {
-                return ParseError.MemoryAllocationFailed;
-            };
-            errdefer {
-                self.lexer_proc.allocator.destroy(node);
-            }
-
-            node.* = ast.Node{
-                .type = .Variable,
-                .pos = ident_token.?.pos,
-                .node_variant = .{
-                    .variable = .{
-                        .name = name,
-                        .val = val,
-                    },
+            switch (next_token.type) {
+                .Plus, .Minus, .Mult, .Div, .Equal => {
+                    const right = try self.parse_expr(bp.right);
+                    left = try self.create_binary_node(next_token.data.sval.items, left, right);
                 },
-            };
-
-            name = ArrayList(u8).init(self.lexer_proc.allocator);
-            self.lexer_proc.nodes.push(node.*) catch {
-                return ParseError.MemoryAllocationFailed;
-            };
+                else => unreachable,
+            }
         }
-        return true;
+
+        return left;
     }
 
     fn next(self: *Self) ParseError!bool {
-        const t = self.token_peek_next();
-        if (t == null) {
-            return false;
-        }
-        switch (t.?.type) {
+        const t = self.token_peek_next() orelse return false;
+
+        try switch (t.type) {
             .Number, .Identifier => {
-                try self.parse_expressionable();
+                // Pratt get control for expression
+                const expr_node = try self.parse_expr(0);
+                self.lexer_proc.nodes.push(expr_node) catch {
+                    return ParseError.MemoryAllocationFailed;
+                };
             },
-            else => {
-                return ParseError.InvalidToken;
+            .NewLine => {
+                _ = self.token_next();
             },
-        }
+            else => ParseError.InvalidToken,
+        };
         return true;
     }
 

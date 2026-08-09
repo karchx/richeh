@@ -1,27 +1,13 @@
 const std = @import("std");
+const token = @import("token.zig");
 
-pub const Associativity = enum { LeftToRight, RightToLeft };
+pub const Associativity = struct { left: u8, right: u8 };
 
-pub const MAX_OPERATORS_IN_GROUP = 12;
-
-pub const TOTAL_OPERATORS_GROUP = 14;
-
-pub const OpPrecedenceGroup = struct {
-    operators: [MAX_OPERATORS_IN_GROUP]?[]const u8,
-    associativity: ?Associativity = null,
-};
-
-pub const op_precedence = [_]OpPrecedenceGroup{
-    OpPrecedenceGroup{
-        .operators = [_]?[]const u8{ "*", "/", null, null, null, null, null, null, null, null, null, null },
-        .associativity = .LeftToRight,
-    },
-    OpPrecedenceGroup{
-        .operators = [_]?[]const u8{ "+", "-", null, null, null, null, null, null, null, null, null, null },
-        .associativity = .LeftToRight,
-    },
-    OpPrecedenceGroup{
-        .operators = [_]?[]const u8{ "=", null, null, null, null, null, null, null, null, null, null, null },
-        .associativity = .RightToLeft,
-    },
-};
+pub fn get_infix_bp(token_type: token.TokenType) ?Associativity {
+    return switch (token_type) {
+        .Equal => .{ .left = 1, .right = 2 },
+        .Plus, .Minus => .{ .left = 3, .right = 4 },
+        .Mult, .Div => .{ .left = 5, .right = 6 },
+        else => null,
+    };
+}

@@ -21,6 +21,9 @@ pub const TokenType = enum {
     Comment,
     /// An newline
     NewLine,
+
+    /// End of line
+    EOF,
 };
 
 fn ArrayList(comptime T: type) type {
