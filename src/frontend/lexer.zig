@@ -218,6 +218,18 @@ pub const Lexer = struct {
         };
     }
 
+    fn token_make_symbol(self: *Self) LexError!?token.Token {
+        const c = try self.peek_char() orelse return null;
+        _ = try self.next_char();
+        return switch (c) {
+            '(' => token.Token{ .type = .LParen, .data = .{ .cval = c }, .pos = self.pos },
+            ')' => token.Token{ .type = .RParen, .data = .{ .cval = c }, .pos = self.pos },
+            ',' => token.Token{ .type = .Comma, .data = .{ .cval = c }, .pos = self.pos },
+            ';' => token.Token{ .type = .Semicolon, .data = .{ .cval = c }, .pos = self.pos },
+            else => undefined,
+        };
+    }
+
     fn token_make_comment(self: *Self) LexError!token.Token {
         var buffer = ArrayList(u8).init(self.allocator);
         try self.getc_if(&buffer, struct {
@@ -325,13 +337,15 @@ pub const Lexer = struct {
             return t;
         }
 
-        const c = try self.peek_char();
-        if (c == null) {
-            return t;
-        }
+        const c = try self.peek_char() orelse return t;
 
-        switch (c.?) {
+        std.debug.print("=================================\n", .{});
+        std.debug.print("Symbol {c}\n", .{c});
+        std.debug.print("=================================\n", .{});
+
+        switch (c) {
             '+', '-', '*', '/', '=' => t = try self.token_make_operator(),
+            '(', ')', ';', ',' => t = try self.token_make_symbol(),
             '0'...'9' => t = try self.token_make_number(),
             '\n' => t = try self.token_make_newline(),
             ' ', '\t', '\r' => t = try self.handle_whitespace(),

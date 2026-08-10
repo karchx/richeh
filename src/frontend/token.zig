@@ -21,7 +21,14 @@ pub const TokenType = enum {
     Comment,
     /// An newline
     NewLine,
-
+    /// A Symbol '('
+    LParen,
+    /// A Symbol ')'
+    RParen,
+    /// A Symbol ','
+    Comma,
+    /// A Symbol ';'
+    Semicolon,
     /// End of line
     EOF,
 };
