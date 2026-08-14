@@ -182,8 +182,6 @@ pub const Lexer = struct {
             return LexError.InvalidNumber;
         };
 
-        _ = try self.next_char();
-
         return token.Token{
             .type = .Number,
             .data = .{ .llnum = v },
@@ -221,6 +219,7 @@ pub const Lexer = struct {
     fn token_make_symbol(self: *Self) LexError!?token.Token {
         const c = try self.peek_char() orelse return null;
         _ = try self.next_char();
+
         return switch (c) {
             '(' => token.Token{ .type = .LParen, .data = .{ .cval = c }, .pos = self.pos },
             ')' => token.Token{ .type = .RParen, .data = .{ .cval = c }, .pos = self.pos },
@@ -339,9 +338,9 @@ pub const Lexer = struct {
 
         const c = try self.peek_char() orelse return t;
 
-        std.debug.print("=================================\n", .{});
-        std.debug.print("Symbol {c}\n", .{c});
-        std.debug.print("=================================\n", .{});
+        // std.debug.print("=================================\n", .{});
+        // std.debug.print("Symbol {c}\n", .{c});
+        // std.debug.print("=================================\n", .{});
 
         switch (c) {
             '+', '-', '*', '/', '=' => t = try self.token_make_operator(),
