@@ -66,19 +66,15 @@ pub const Parse = struct {
 
     fn create_identifier_node(_: *Self, tok: token.Token) ParseError!ast.Node {
         return ast.Node{
-            .type = .Identifier,
             .pos = tok.pos,
-            .data = tok.data,
-            .node_variant = null,
+            .variant = .{ .identifier = tok.data },
         };
     }
 
     fn create_number_node(_: *Self, tok: token.Token) ParseError!ast.Node {
         return ast.Node{
-            .type = .Number,
             .pos = tok.pos,
-            .data = tok.data,
-            .node_variant = null,
+            .variant = .{ .number = tok.data },
         };
     }
 
@@ -94,14 +90,11 @@ pub const Parse = struct {
         right_ptr.* = right;
 
         return ast.Node{
-            .type = .Expression,
-            .node_variant = .{
-                .exp = .{
-                    .left = left_ptr,
-                    .right = right_ptr,
-                    .op = op_str,
-                },
-            },
+            .variant = .{ .exp = .{
+                .left = left_ptr,
+                .right = right_ptr,
+                .op = op_str,
+            } },
         };
     }
 
@@ -111,13 +104,11 @@ pub const Parse = struct {
         };
         right_ptr.* = right;
 
-        const ident_name = left.data.?.sval;
+        const ident_name = left.variant.identifier.sval;
 
         return ast.Node{
-            .type = .Variable,
             .pos = left.pos,
-            .data = null,
-            .node_variant = .{
+            .variant = .{
                 .variable = .{
                     .name = ident_name,
                     .val = right_ptr,
@@ -149,10 +140,13 @@ pub const Parse = struct {
                     left = try self.create_binary_node(next_token.data.sval.items, left, right);
                 },
                 .Equal => {
-                    if (left.type != .Identifier) return ParseError.InvalidAssignment;
-
-                    const right = try self.parse_expr(bp.right);
-                    left = try self.create_variable_node(left, right);
+                    switch (left.variant) {
+                        .identifier => {
+                            const right = try self.parse_expr(bp.right);
+                            left = try self.create_variable_node(left, right);
+                        },
+                        else => return ParseError.InvalidAssignment,
+                    }
                 },
                 else => unreachable,
             }

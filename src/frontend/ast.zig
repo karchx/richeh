@@ -20,13 +20,15 @@ pub const NodeType = enum {
     Variable,
     ///  Represents a default statement.
     Statement,
+    /// Represents a matrix
+    MatrixNode,
 };
 
 pub const Node = struct {
-    type: NodeType,
     pos: ?token.Pos = null,
-    data: ?token.TokenData = null,
-    node_variant: ?union(enum) {
+    variant: Variant,
+
+    pub const Variant = union(enum) {
         /// The expresion node.
         exp: struct {
             left: ?*Node = null,
@@ -42,7 +44,10 @@ pub const Node = struct {
 
         /// The variable node.
         variable: struct { name: ArrayList(u8), val: ?*Node = null },
-    } = null,
+        number: token.TokenData,
+        identifier: token.TokenData,
+        statement: void,
+    };
 };
 
 /// Checks if the is a value type.
