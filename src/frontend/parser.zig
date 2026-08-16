@@ -19,6 +19,7 @@ pub const ParseError = error{
     InvalidOperand,
     InvalidIdentifier,
     InvalidAssignment,
+    InvalidMatrixDimensions,
     UnexpectedEOF,
 } || LexError;
 
@@ -117,15 +118,94 @@ pub const Parse = struct {
         };
     }
 
-    fn parse_expr(self: *Self, min_bp: u8) ParseError!ast.Node {
-        const tok = self.token_next() orelse return ParseError.UnexpectedEOF;
+    fn parse_group_or_matrix(self: *Self, tok: token.Token) ParseError!ast.Node {
+        const next_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
 
-        var left = try switch (tok.type) {
-            .Number => self.create_number_node(tok),
-            .Identifier => self.create_identifier_node(tok),
-            else => return ParseError.InvalidToken,
+        // If the next token distint LParen is simple operations
+        // e.g: (5 * 5)
+        if (next_tok.type != .LParen) {
+            const expr = try self.parse_expr(0);
+            const rparen = self.token_next() orelse return ParseError.UnexpectedEOF;
+            if (rparen.type != .RParen) return ParseError.InvalidToken;
+            return expr;
+        }
+
+        var elements_list = ArrayList(*ast.Node).init(self.lexer_proc.allocator);
+        errdefer elements_list.deinit();
+
+        var rows: usize = 0;
+        var cols: usize = 0;
+
+        // rows
+        while (true) {
+            _ = self.token_next();
+            var current_cols: usize = 0;
+
+            // columns
+            while (true) {
+                const node_val = try self.parse_expr(0);
+
+                const node_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+                node_ptr.* = node_val;
+
+                elements_list.append(node_ptr) catch return ParseError.MemoryAllocationFailed;
+                current_cols += 1;
+
+                const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
+                if (delim.type == .Semicolon) {
+                    continue;
+                } else if (delim.type == .RParen) {
+                    break;
+                } else {
+                    return ParseError.InvalidToken;
+                }
+            }
+
+            if (rows == 0) {
+                cols = current_cols;
+            } else if (cols != current_cols) {
+                return ParseError.InvalidMatrixDimensions;
+            }
+
+            rows += 1;
+
+            const row_delim = self.token_next() orelse return ParseError.UnexpectedEOF;
+            if (row_delim.type == .Comma) {
+                continue;
+            } else if (row_delim.type == .RParen) {
+                break;
+            } else {
+                return ParseError.InvalidToken;
+            }
+        }
+
+        const element_slice = elements_list.toOwnedSlice() catch {
+            return ParseError.MemoryAllocationFailed;
         };
 
+        return ast.Node{
+            .pos = tok.pos,
+            .variant = .{
+                .matrix = .{
+                    .cols = rows,
+                    .rows = cols,
+                    .elements = element_slice,
+                },
+            },
+        };
+    }
+
+    fn parse_prefix(self: *Self, tok: token.Token) ParseError!ast.Node {
+        return try switch (tok.type) {
+            .Number => self.create_number_node(tok),
+            .Identifier => self.create_identifier_node(tok),
+            .LParen => try self.parse_group_or_matrix(tok),
+            else => return ParseError.InvalidToken,
+        };
+    }
+
+    fn parse_infix(self: *Self, initial_left: ast.Node, min_bp: u8) ParseError!ast.Node {
+        var left = initial_left;
         while (true) {
             const next_token = self.token_peek_next() orelse break;
             const bp = op_table.get_infix_bp(next_token.type) orelse break;
@@ -151,8 +231,14 @@ pub const Parse = struct {
                 else => unreachable,
             }
         }
-
         return left;
+    }
+
+    fn parse_expr(self: *Self, min_bp: u8) ParseError!ast.Node {
+        const tok = self.token_next() orelse return ParseError.UnexpectedEOF;
+
+        const left = try self.parse_prefix(tok);
+        return try self.parse_infix(left, min_bp);
     }
 
     fn next(self: *Self) ParseError!bool {

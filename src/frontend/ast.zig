@@ -43,7 +43,16 @@ pub const Node = struct {
         },
 
         /// The variable node.
-        variable: struct { name: ArrayList(u8), val: ?*Node = null },
+        variable: struct {
+            name: ArrayList(u8),
+            val: ?*Node = null,
+        },
+        // The matrix node.
+        matrix: struct {
+            rows: usize,
+            cols: usize,
+            elements: []const *Node,
+        },
         number: token.TokenData,
         identifier: token.TokenData,
         statement: void,

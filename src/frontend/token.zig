@@ -13,8 +13,6 @@ pub const TokenType = enum {
     Mult,
     /// Operator '/'
     Div,
-    /// A symbol, such as parentheses, braces, etc.
-    Symbol,
     /// A numeric literal.
     Number,
     /// An comment XD.

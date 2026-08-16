@@ -60,5 +60,9 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
             try writer.print("Operator: \n", .{});
             try print_node(unary.operand.*, writer, depth + 2);
         },
+        .matrix => {
+            try print_indent(writer, depth + 1);
+            try writer.print("Matrix\n", .{});
+        },
     }
 }
