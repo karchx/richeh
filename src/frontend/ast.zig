@@ -7,35 +7,24 @@ fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
 }
 
-pub const NodeType = enum {
-    /// Represents an expression node.
-    Expression,
-    /// Represents a number node
-    Number,
-    /// Represents an identifier node.
-    Identifier,
-    /// Represents a unary node.
-    Unary,
-    /// Represents a variable node.
-    Variable,
-    ///  Represents a default statement.
-    Statement,
-    /// Represents a matrix
-    MatrixNode,
-};
-
 pub const Node = struct {
     pos: ?token.Pos = null,
     variant: Variant,
 
     pub const Variant = union(enum) {
+        /// The root node.
+        program: struct {
+            statements: []const *Node,
+        },
+        expr_statement: struct {
+            expr: *Node,
+        },
         /// The expresion node.
         exp: struct {
             left: ?*Node = null,
             right: ?*Node = null,
             op: []const u8,
         },
-
         /// The unary node.
         unary: struct {
             op: []const u8,
@@ -43,9 +32,9 @@ pub const Node = struct {
         },
 
         /// The variable node.
-        variable: struct {
-            name: ArrayList(u8),
-            val: ?*Node = null,
+        assignment: struct {
+            target: []const u8,
+            val: *Node,
         },
         // The matrix node.
         matrix: struct {
@@ -55,7 +44,6 @@ pub const Node = struct {
         },
         number: token.TokenData,
         identifier: token.TokenData,
-        statement: void,
     };
 };
 

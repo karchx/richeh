@@ -4,6 +4,7 @@ const ast = @import("ast.zig");
 const lexer = @import("lexer.zig");
 const token = @import("token.zig");
 const op_table = @import("operator_precedence.zig");
+const lib = @import("lib");
 const LexError = lexer.LexError;
 
 fn ArrayList(comptime T: type) type {
@@ -99,19 +100,19 @@ pub const Parse = struct {
         };
     }
 
-    fn create_variable_node(self: *Self, left: ast.Node, right: ast.Node) ParseError!ast.Node {
+    fn create_assignment_node(self: *Self, left: ast.Node, right: ast.Node) ParseError!ast.Node {
         const right_ptr = self.lexer_proc.allocator.create(ast.Node) catch {
             return ParseError.MemoryAllocationFailed;
         };
         right_ptr.* = right;
 
-        const ident_name = left.variant.identifier.sval;
+        const target_name = left.variant.identifier.sval.items;
 
         return ast.Node{
             .pos = left.pos,
             .variant = .{
-                .variable = .{
-                    .name = ident_name,
+                .assignment = .{
+                    .target = target_name,
                     .val = right_ptr,
                 },
             },
@@ -223,7 +224,7 @@ pub const Parse = struct {
                     switch (left.variant) {
                         .identifier => {
                             const right = try self.parse_expr(bp.right);
-                            left = try self.create_variable_node(left, right);
+                            left = try self.create_assignment_node(left, right);
                         },
                         else => return ParseError.InvalidAssignment,
                     }
@@ -241,14 +242,32 @@ pub const Parse = struct {
         return try self.parse_infix(left, min_bp);
     }
 
-    fn next(self: *Self) ParseError!bool {
+    fn next(self: *Self, statements: *ArrayList(*ast.Node)) ParseError!bool {
         const t = self.token_peek_next() orelse return false;
 
         try switch (t.type) {
             .Number, .Identifier => {
                 // Pratt get control for expression
                 const expr_node = try self.parse_expr(0);
-                self.lexer_proc.nodes.push(expr_node) catch {
+                const node_ptr = self.lexer_proc.allocator.create(ast.Node) catch {
+                    return ParseError.MemoryAllocationFailed;
+                };
+
+                node_ptr.* = expr_node;
+
+                const stmt_node = ast.Node{
+                    .pos = expr_node.pos,
+                    .variant = .{
+                        .expr_statement = .{
+                            .expr = node_ptr,
+                        },
+                    },
+                };
+
+                const stmt_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+                stmt_ptr.* = stmt_node;
+
+                statements.append(stmt_ptr) catch {
                     return ParseError.MemoryAllocationFailed;
                 };
             },
@@ -260,7 +279,23 @@ pub const Parse = struct {
         return true;
     }
 
-    pub fn parse(self: *Self) ParseError!void {
-        while (try self.next()) {}
+    pub fn parse(self: *Self) ParseError!ast.Node {
+        var statements = ArrayList(*ast.Node).init(self.lexer_proc.allocator);
+        errdefer statements.deinit();
+
+        while (try self.next(&statements)) {}
+
+        const statements_slice = statements.toOwnedSlice() catch {
+            return ParseError.MemoryAllocationFailed;
+        };
+
+        return ast.Node{
+            .pos = if (statements_slice.len > 0) statements_slice[0].pos else null,
+            .variant = .{
+                .program = .{
+                    .statements = statements_slice,
+                },
+            },
+        };
     }
 };

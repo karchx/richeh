@@ -13,6 +13,13 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
     try writer.print("Node Type: {s}\n", .{@tagName(node.variant)});
 
     switch (node.variant) {
+        .program => |prog| {
+            try print_indent(writer, depth + 1);
+            try writer.print("Statements: \n", .{});
+            for (prog.statements) |stmt| {
+                try print_node(stmt.*, writer, depth + 2);
+            }
+        },
         .exp => |exp| {
             if (exp.op.len > 0) {
                 try print_indent(writer, depth + 1);
@@ -29,25 +36,21 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
                 }
             }
         },
-        .variable => |variable| {
-            if (variable.name.items.len > 0) {
-                try print_indent(writer, depth + 1);
-                try writer.print("Name {s}\n", .{variable.name.items});
-            }
-
-            if (variable.val) |val| {
-                try print_indent(writer, depth + 1);
-                try writer.print("Value:\n", .{});
-                try print_node(val.*, writer, depth + 2);
-            }
+        .assignment => |assign| {
+            try print_indent(writer, depth + 1);
+            try writer.print("Target: {s}\n", .{assign.target});
+            try print_indent(writer, depth + 1);
+            try writer.print("Value:\n", .{});
+            try print_node(assign.val.*, writer, depth + 2);
+        },
+        .expr_statement => |stmt| {
+            try print_indent(writer, depth + 1);
+            try writer.print("Expression Statement:\n", .{});
+            try print_node(stmt.expr.*, writer, depth + 2);
         },
         .identifier => |data| {
             try print_indent(writer, depth + 1);
             try writer.print("Name: {s}\n", .{data.sval.items});
-        },
-        .statement => {
-            try print_indent(writer, depth + 1);
-            try writer.print("Statement\n", .{});
         },
         .number => |data| {
             try print_indent(writer, depth + 1);
@@ -62,7 +65,9 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
         },
         .matrix => {
             try print_indent(writer, depth + 1);
-            try writer.print("Matrix\n", .{});
+            // for (matrix.elements) |el| {
+            //     try print_node(el.*, writer, depth + 2);
+            // }
         },
     }
 }

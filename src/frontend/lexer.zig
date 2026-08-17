@@ -32,7 +32,6 @@ pub const Lexer = struct {
     current_token: ?token.Token = null,
     file_offset: u64 = 0,
     tokens: Vector(token.Token),
-    nodes: Vector(ast.Node),
     pos: token.Pos,
 
     const Self = @This();
@@ -76,7 +75,6 @@ pub const Lexer = struct {
             .allocator = a,
             .io = io,
             .tokens = Vector(token.Token).init(a),
-            .nodes = Vector(ast.Node).init(a),
             .pos = .{ .col = 1, .line = 1, .start_col = 1, .end_col = 1, .filename = input_file_path },
         };
     }

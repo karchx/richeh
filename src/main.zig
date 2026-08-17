@@ -55,7 +55,7 @@ fn run_pipeline(ctx: anytype) void {
     defer lp.deinit();
 
     lp.lex() catch |err| print_error_and_exit(io, err);
-    pp.parse() catch |err| print_error_and_exit(io, err);
+    const root_node = pp.parse() catch |err| print_error_and_exit(io, err);
     // for (lp.tokens.items()) |tok| {
     //     std.debug.print("Tokens: {s}\n", .{@tagName(tok.type)});
     // }
@@ -63,9 +63,7 @@ fn run_pipeline(ctx: anytype) void {
     if (options.print_ast) {
         var ast_buf: [65536]u8 = undefined;
         var ast_writer = std.Io.File.stdout().writer(io, &ast_buf);
-        for (lp.nodes.items()) |node| {
-            pprint.print_node(node, &ast_writer.interface, 0) catch |err| print_error_and_exit(io, err);
-        }
+        pprint.print_node(root_node, &ast_writer.interface, 0) catch |err| print_error_and_exit(io, err);
         ast_writer.interface.flush() catch |err| print_error_and_exit(io, err);
     }
 }
