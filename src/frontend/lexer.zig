@@ -152,7 +152,7 @@ pub const Lexer = struct {
 
         try self.getc_if(&raw, struct {
             fn call(_c: u8) bool {
-                return ascii.isDigit(_c) or _c == '_';
+                return ascii.isDigit(_c) or _c == 'x' or ascii.isHex(_c) or _c == '_';
             }
         }.call);
 
@@ -161,21 +161,27 @@ pub const Lexer = struct {
             if (c == '_') continue;
             buffer.append(c) catch return LexError.MemoryAllocationFailed;
         }
-
         return buffer;
     }
 
-    fn read_number(self: *Self) LexError!c_longlong {
-        const s = try self.read_number_str();
-        defer s.deinit();
-
-        const number: c_longlong = std.fmt.parseInt(c_longlong, s.items, 10) catch {
-            return LexError.InvalidNumber;
-        };
-        return number;
-    }
-
     fn token_make_number_from_string(self: *Self, number_str: []const u8) LexError!?token.Token {
+        if (number_str[0] == '0') {
+            if (number_str[1] == 'x') {
+                var v = ArrayList(u8).init(self.allocator);
+                v.appendSlice(number_str) catch {
+                    return LexError.MemoryAllocationFailed;
+                };
+
+                return token.Token{
+                    .type = .Number,
+                    .data = .{ .sval = v },
+                    .pos = self.pos,
+                };
+            } else {
+                return LexError.InvalidExpression;
+            }
+        }
+
         const v: c_longlong = std.fmt.parseInt(c_longlong, number_str, 10) catch {
             return LexError.InvalidNumber;
         };
@@ -256,8 +262,6 @@ pub const Lexer = struct {
     /// Creates an identifier or keyword token from the input file.
     /// It then checks if the collected characters form a keyword or an identifier and
     /// returns the corresponding token.
-    ///
-    // TODO: validate keywords tokens
     fn token_make_identifier_or_keyword(self: *Self) LexError!?token.Token {
         var buffer = ArrayList(u8).init(self.allocator);
         try self.getc_if(&buffer, struct {
@@ -265,6 +269,14 @@ pub const Lexer = struct {
                 return ascii.isAlphabetic(_c) or ascii.isDigit(_c) or _c == '_';
             }
         }.call);
+
+        if (mem.eql(u8, "out", buffer.items)) {
+            return token.Token{
+                .type = .Keyword,
+                .data = .{ .sval = buffer },
+                .pos = self.pos,
+            };
+        }
 
         return token.Token{
             .type = .Identifier,
@@ -302,14 +314,12 @@ pub const Lexer = struct {
     }
 
     fn read_special_token(self: *Self) LexError!?token.Token {
-        const c = try self.peek_char();
-        if (c == null) {
-            return null;
-        }
+        const c = try self.peek_char() orelse return null;
 
-        if (ascii.isAlphabetic(c.?) or c.? == '_') {
+        if (ascii.isAlphabetic(c) or c == '_') {
             return self.token_make_identifier_or_keyword();
         }
+
         return null;
     }
 
@@ -335,10 +345,6 @@ pub const Lexer = struct {
         }
 
         const c = try self.peek_char() orelse return t;
-
-        // std.debug.print("=================================\n", .{});
-        // std.debug.print("Symbol {c}\n", .{c});
-        // std.debug.print("=================================\n", .{});
 
         switch (c) {
             '+', '-', '*', '/', '=' => t = try self.token_make_operator(),

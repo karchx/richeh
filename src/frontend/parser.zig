@@ -119,6 +119,53 @@ pub const Parse = struct {
         };
     }
 
+    fn create_out_node(self: *Self, tok: token.Token) ParseError!ast.Node {
+        const next_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
+
+        // The next token not is LParen
+        // A correct out statement node is: `out(expr)`
+        if (next_tok.type != .LParen) return ParseError.InvalidToken;
+
+        var val_list = ArrayList(*ast.Node).init(self.lexer_proc.allocator);
+        errdefer val_list.deinit();
+        var addr: []const u8 = &.{};
+
+        while (true) {
+            const nnn = self.token_next() orelse return ParseError.UnexpectedEOF;
+
+            if (nnn.type == .RParen) break;
+
+            const node_val = try self.parse_expr(0);
+            const node_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+            node_ptr.* = node_val;
+            val_list.append(node_ptr) catch return ParseError.MemoryAllocationFailed;
+
+            const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
+            if (delim.type == .Comma) {
+                const addr_tok = self.token_next() orelse return ParseError.UnexpectedEOF;
+                if (addr_tok.type == .Number) {
+                    addr = addr_tok.data.sval.items;
+                } else {
+                    continue;
+                }
+            } else {
+                return ParseError.InvalidToken;
+            }
+        }
+
+        const val_slice = val_list.toOwnedSlice() catch return ParseError.MemoryAllocationFailed;
+
+        return ast.Node{
+            .pos = tok.pos,
+            .variant = .{
+                .out_statement = .{
+                    .val = val_slice,
+                    .addr = addr,
+                },
+            },
+        };
+    }
+
     fn parse_group_or_matrix(self: *Self, tok: token.Token) ParseError!ast.Node {
         const next_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
 
@@ -200,6 +247,7 @@ pub const Parse = struct {
         return try switch (tok.type) {
             .Number => self.create_number_node(tok),
             .Identifier => self.create_identifier_node(tok),
+            .Keyword => self.create_out_node(tok),
             .LParen => try self.parse_group_or_matrix(tok),
             else => return ParseError.InvalidToken,
         };
@@ -270,6 +318,14 @@ pub const Parse = struct {
                 statements.append(stmt_ptr) catch {
                     return ParseError.MemoryAllocationFailed;
                 };
+            },
+            .Keyword => {
+                const expr_node = try self.parse_expr(0);
+
+                const stmt_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+                stmt_ptr.* = expr_node;
+
+                statements.append(stmt_ptr) catch return ParseError.MemoryAllocationFailed;
             },
             .NewLine => {
                 _ = self.token_next();

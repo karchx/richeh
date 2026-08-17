@@ -30,11 +30,15 @@ pub const Node = struct {
             op: []const u8,
             operand: *Node,
         },
-
         /// The variable node.
         assignment: struct {
             target: []const u8,
             val: *Node,
+        },
+        /// The out statement node.
+        out_statement: struct {
+            val: []const *Node,
+            addr: []const u8, // address output, pin_number or hex_number
         },
         // The matrix node.
         matrix: struct {

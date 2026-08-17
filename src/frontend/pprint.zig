@@ -48,6 +48,13 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
             try writer.print("Expression Statement:\n", .{});
             try print_node(stmt.expr.*, writer, depth + 2);
         },
+        .out_statement => |stmt| {
+            for (stmt.val) |val| {
+                try print_node(val.*, writer, depth + 1);
+            }
+            try print_indent(writer, depth + 1);
+            try writer.print("Addr: {s}\n", .{stmt.addr});
+        },
         .identifier => |data| {
             try print_indent(writer, depth + 1);
             try writer.print("Name: {s}\n", .{data.sval.items});

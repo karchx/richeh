@@ -27,6 +27,8 @@ pub const TokenType = enum {
     Comma,
     /// A Symbol ';'
     Semicolon,
+    /// A Keyword 'out', 'if', 'else', etc.
+    Keyword,
     /// End of line
     EOF,
 };
