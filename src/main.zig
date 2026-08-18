@@ -1,9 +1,11 @@
 const std = @import("std");
 const frontend = @import("frontend");
 const cli = @import("cli");
+const irmod = @import("ir");
 const lexer = frontend.lexer;
 const parser = frontend.parser;
 const pprint = frontend.pprint;
+const irbuilder = irmod.builder;
 
 fn print_error_and_exit(io: std.Io, err: anyerror) noreturn {
     const stderr = std.Io.File.stderr();
@@ -52,13 +54,13 @@ fn run_pipeline(ctx: anytype) void {
 
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     var pp = parser.Parse.init(&lp);
-    defer lp.deinit();
+    _ = irbuilder.IrBuilder.init(global_allocator) catch |err| print_error_and_exit(io, err);
+    defer {
+        lp.deinit();
+    }
 
     lp.lex() catch |err| print_error_and_exit(io, err);
     const root_node = pp.parse() catch |err| print_error_and_exit(io, err);
-    // for (lp.tokens.items()) |tok| {
-    //     std.debug.print("Tokens: {s}\n", .{@tagName(tok.type)});
-    // }
 
     if (options.print_ast) {
         var ast_buf: [65536]u8 = undefined;
