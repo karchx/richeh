@@ -111,7 +111,7 @@ pub const Parse = struct {
         return ast.Node{
             .pos = left.pos,
             .variant = .{
-                .assignment = .{
+                .assignment_statement = .{
                     .target = target_name,
                     .val = right_ptr,
                 },
@@ -128,7 +128,7 @@ pub const Parse = struct {
 
         var val_list = ArrayList(*ast.Node).init(self.lexer_proc.allocator);
         errdefer val_list.deinit();
-        var addr: []const u8 = &.{};
+        const addr_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
 
         while (true) {
             const nnn = self.token_next() orelse return ParseError.UnexpectedEOF;
@@ -142,9 +142,10 @@ pub const Parse = struct {
 
             const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
             if (delim.type == .Comma) {
-                const addr_tok = self.token_next() orelse return ParseError.UnexpectedEOF;
+                const addr_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
                 if (addr_tok.type == .Number) {
-                    addr = addr_tok.data.sval.items;
+                    const addr_val = try self.parse_expr(0);
+                    addr_ptr.* = addr_val;
                 } else {
                     continue;
                 }
@@ -160,7 +161,7 @@ pub const Parse = struct {
             .variant = .{
                 .out_statement = .{
                     .val = val_slice,
-                    .addr = addr,
+                    .addr = addr_ptr,
                 },
             },
         };
@@ -300,22 +301,9 @@ pub const Parse = struct {
                 const node_ptr = self.lexer_proc.allocator.create(ast.Node) catch {
                     return ParseError.MemoryAllocationFailed;
                 };
-
                 node_ptr.* = expr_node;
 
-                const stmt_node = ast.Node{
-                    .pos = expr_node.pos,
-                    .variant = .{
-                        .expr_statement = .{
-                            .expr = node_ptr,
-                        },
-                    },
-                };
-
-                const stmt_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
-                stmt_ptr.* = stmt_node;
-
-                statements.append(stmt_ptr) catch {
+                statements.append(node_ptr) catch {
                     return ParseError.MemoryAllocationFailed;
                 };
             },

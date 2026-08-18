@@ -16,9 +16,6 @@ pub const Node = struct {
         program: struct {
             statements: []const *Node,
         },
-        expr_statement: struct {
-            expr: *Node,
-        },
         /// The expresion node.
         exp: struct {
             left: ?*Node = null,
@@ -31,14 +28,14 @@ pub const Node = struct {
             operand: *Node,
         },
         /// The variable node.
-        assignment: struct {
+        assignment_statement: struct {
             target: []const u8,
             val: *Node,
         },
         /// The out statement node.
         out_statement: struct {
             val: []const *Node,
-            addr: []const u8, // address output, pin_number or hex_number
+            addr: *Node, // address output, pin_number or hex_number
         },
         // The matrix node.
         matrix: struct {

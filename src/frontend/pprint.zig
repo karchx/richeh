@@ -36,24 +36,20 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
                 }
             }
         },
-        .assignment => |assign| {
+        .assignment_statement => |assign| {
             try print_indent(writer, depth + 1);
             try writer.print("Target: {s}\n", .{assign.target});
             try print_indent(writer, depth + 1);
             try writer.print("Value:\n", .{});
             try print_node(assign.val.*, writer, depth + 2);
         },
-        .expr_statement => |stmt| {
-            try print_indent(writer, depth + 1);
-            try writer.print("Expression Statement:\n", .{});
-            try print_node(stmt.expr.*, writer, depth + 2);
-        },
         .out_statement => |stmt| {
             for (stmt.val) |val| {
                 try print_node(val.*, writer, depth + 1);
             }
             try print_indent(writer, depth + 1);
-            try writer.print("Addr: {s}\n", .{stmt.addr});
+            try writer.print("TargetAddress: \n", .{});
+            try print_node(stmt.addr.*, writer, depth + 2);
         },
         .identifier => |data| {
             try print_indent(writer, depth + 1);
@@ -61,7 +57,11 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
         },
         .number => |data| {
             try print_indent(writer, depth + 1);
-            try writer.print("Value: {d}\n", .{data.llnum});
+            switch (data) {
+                .llnum => |num| try writer.print("Value: {d}\n", .{num}),
+                .sval => |str| try writer.print("Value: {s}\n", .{str.items}),
+                else => try writer.print("Value: Unknow", .{}),
+            }
         },
         .unary => |unary| {
             try print_indent(writer, depth + 1);
