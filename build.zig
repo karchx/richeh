@@ -20,6 +20,9 @@ pub fn build(b: *std.Build) void {
 
     const ir_mod = b.createModule(.{
         .root_source_file = b.path("src/ir/root.zig"),
+        .imports = &.{
+            .{ .name = "frontend", .module = frontend_mod },
+        },
     });
 
     const cli_mod = b.createModule(.{

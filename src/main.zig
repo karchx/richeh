@@ -1,11 +1,12 @@
 const std = @import("std");
 const frontend = @import("frontend");
 const cli = @import("cli");
-const irmod = @import("ir");
+const ir = @import("ir");
 const lexer = frontend.lexer;
 const parser = frontend.parser;
 const pprint = frontend.pprint;
-const irbuilder = irmod.builder;
+const irbuilder = ir.builder;
+const gen = ir.gen;
 
 fn print_error_and_exit(io: std.Io, err: anyerror) noreturn {
     const stderr = std.Io.File.stderr();
@@ -54,13 +55,16 @@ fn run_pipeline(ctx: anytype) void {
 
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     var pp = parser.Parse.init(&lp);
-    _ = irbuilder.IrBuilder.init(global_allocator) catch |err| print_error_and_exit(io, err);
+    var builder = irbuilder.IrBuilder.init(global_allocator) catch |err| print_error_and_exit(io, err);
     defer {
         lp.deinit();
     }
 
     lp.lex() catch |err| print_error_and_exit(io, err);
     const root_node = pp.parse() catch |err| print_error_and_exit(io, err);
+    const stmts = root_node.variant.program.statements;
+    var generation = gen.Gen.init(&builder, stmts) catch |err| print_error_and_exit(io, err);
+    generation.generate_instruction() catch |err| print_error_and_exit(io, err);
 
     if (options.print_ast) {
         var ast_buf: [65536]u8 = undefined;
