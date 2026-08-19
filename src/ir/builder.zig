@@ -67,8 +67,8 @@ pub const IrBuilder = struct {
     }
 
     pub fn emit(self: *Self, inst: IrInstruction) IrError!void {
-        return self.instructions.append(inst) catch {
-            IrError.MemoryAllocationFailed;
+        self.instructions.append(inst) catch {
+            return IrError.MemoryAllocationFailed;
         };
     }
 };

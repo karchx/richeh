@@ -26,7 +26,7 @@ pub const Gen = struct {
     }
 
     fn visit(self: *Self, node: *const ast.Node) IrError!?VReg {
-        switch (node.variant) {
+        return switch (node.variant) {
             .program => null,
             .number => |num| {
                 const reg = self.builder_proc.allocReg();
@@ -68,8 +68,8 @@ pub const Gen = struct {
                 });
                 return reg;
             },
-            else => unreachable
-        }
+            else => null
+        };
     }
 
     fn getOpCode(_: *Self, operator: []const u8) ?IrOpCode {
