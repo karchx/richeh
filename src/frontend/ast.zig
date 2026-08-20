@@ -34,7 +34,7 @@ pub const Node = struct {
         },
         /// The out statement node.
         out_statement: struct {
-            val: []const *Node,
+            val: *Node,
             addr: *Node, // address output, pin_number or hex_number
         },
         // The matrix node.

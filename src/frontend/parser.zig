@@ -130,37 +130,28 @@ pub const Parse = struct {
         errdefer val_list.deinit();
         const addr_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
 
-        while (true) {
-            const nnn = self.token_next() orelse return ParseError.UnexpectedEOF;
+        _ = self.token_next() orelse return ParseError.UnexpectedEOF;
 
-            if (nnn.type == .RParen) break;
+        const node_val = try self.parse_expr(0);
+        const node_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+        node_ptr.* = node_val;
 
-            const node_val = try self.parse_expr(0);
-            const node_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
-            node_ptr.* = node_val;
-            val_list.append(node_ptr) catch return ParseError.MemoryAllocationFailed;
-
-            const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
-            if (delim.type == .Comma) {
-                const addr_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
-                if (addr_tok.type == .Number) {
-                    const addr_val = try self.parse_expr(0);
-                    addr_ptr.* = addr_val;
-                } else {
-                    continue;
-                }
-            } else {
-                return ParseError.InvalidToken;
+        const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
+        if (delim.type == .Comma) {
+            const addr_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
+            if (addr_tok.type == .Number) {
+                const addr_val = try self.parse_expr(0);
+                addr_ptr.* = addr_val;
             }
+        } else {
+            return ParseError.InvalidToken;
         }
-
-        const val_slice = val_list.toOwnedSlice() catch return ParseError.MemoryAllocationFailed;
 
         return ast.Node{
             .pos = tok.pos,
             .variant = .{
                 .out_statement = .{
-                    .val = val_slice,
+                    .val = node_ptr,
                     .addr = addr_ptr,
                 },
             },
@@ -250,7 +241,7 @@ pub const Parse = struct {
             .Identifier => self.create_identifier_node(tok),
             .Keyword => self.create_out_node(tok),
             .LParen => try self.parse_group_or_matrix(tok),
-            else => return ParseError.InvalidToken,
+            else => ParseError.InvalidToken,
         };
     }
 
@@ -294,7 +285,7 @@ pub const Parse = struct {
     fn next(self: *Self, statements: *ArrayList(*ast.Node)) ParseError!bool {
         const t = self.token_peek_next() orelse return false;
 
-        try switch (t.type) {
+        switch (t.type) {
             .Number, .Identifier => {
                 // Pratt get control for expression
                 const expr_node = try self.parse_expr(0);
@@ -315,11 +306,13 @@ pub const Parse = struct {
 
                 statements.append(stmt_ptr) catch return ParseError.MemoryAllocationFailed;
             },
-            .NewLine => {
+            .NewLine, .RParen => { // RParen is close root expresion e.g: (3 + 4)
                 _ = self.token_next();
             },
-            else => ParseError.InvalidToken,
-        };
+            else => {
+                return ParseError.InvalidToken;
+            },
+        }
         return true;
     }
 

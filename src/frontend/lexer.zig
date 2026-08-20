@@ -165,21 +165,19 @@ pub const Lexer = struct {
     }
 
     fn token_make_number_from_string(self: *Self, number_str: []const u8) LexError!?token.Token {
-        if (number_str[0] == '0') {
-            if (number_str[1] == 'x') {
-                var v = ArrayList(u8).init(self.allocator);
-                v.appendSlice(number_str) catch {
-                    return LexError.MemoryAllocationFailed;
-                };
+        // Hexadecimal numbers
+        if (mem.startsWith(u8, number_str, "0x")) {
+            const cleaned_str = number_str[2..];
+            var v = ArrayList(u8).init(self.allocator);
+            v.appendSlice(cleaned_str) catch {
+                return LexError.MemoryAllocationFailed;
+            };
 
-                return token.Token{
-                    .type = .Number,
-                    .data = .{ .sval = v },
-                    .pos = self.pos,
-                };
-            } else {
-                return LexError.InvalidExpression;
-            }
+            return token.Token{
+                .type = .Number,
+                .data = .{ .sval = v },
+                .pos = self.pos,
+            };
         }
 
         const v: c_longlong = std.fmt.parseInt(c_longlong, number_str, 10) catch {

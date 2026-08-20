@@ -44,9 +44,7 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
             try print_node(assign.val.*, writer, depth + 2);
         },
         .out_statement => |stmt| {
-            for (stmt.val) |val| {
-                try print_node(val.*, writer, depth + 1);
-            }
+            try print_node(stmt.val.*, writer, depth + 1);
             try print_indent(writer, depth + 1);
             try writer.print("TargetAddress: \n", .{});
             try print_node(stmt.addr.*, writer, depth + 2);

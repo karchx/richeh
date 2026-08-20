@@ -13,10 +13,7 @@ pub const Gen = struct {
     const Self = @This();
 
     pub fn init(builder_proc: *builder.IrBuilder, stmts: []const *ast.Node) IrError!Self {
-        return Self{
-            .builder_proc = builder_proc,
-            .statements = stmts
-        };
+        return Self{ .builder_proc = builder_proc, .statements = stmts };
     }
 
     pub fn generate_instruction(self: *Self) IrError!void {
@@ -30,10 +27,12 @@ pub const Gen = struct {
             .program => null,
             .number => |num| {
                 const reg = self.builder_proc.allocReg();
-                const parsed_val = switch(num) {
+                const parsed_val = switch (num) {
                     .llnum => |l| @as(u32, @intCast(l)),
-                    .sval => |s| std.fmt.parseInt(u32, s.items, 10) catch { return IrError.MemoryAllocationFailed; },
-                    else => 0
+                    .sval => |s| std.fmt.parseInt(u32, s.items, 16) catch {
+                        return IrError.MemoryAllocationFailed;
+                    },
+                    else => 0,
                 };
 
                 try self.builder_proc.emit(.{
@@ -42,16 +41,6 @@ pub const Gen = struct {
                     .imm_val = parsed_val,
                 });
                 return reg;
-            },
-            .assignment_statement => |assign| {
-                const val_operand = try self.visit(assign.val);
-                try self.builder_proc.emit(.{
-                    .op = .Store,
-                    .symbol = assign.target,
-                    .src1 = val_operand.?,
-                });
-
-                return null;
             },
             .exp => |e| {
                 const left_reg = (try self.visit(e.left.?)).?;
@@ -68,14 +57,45 @@ pub const Gen = struct {
                 });
                 return reg;
             },
-            else => null
+            .identifier => |id| {
+                const reg = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{
+                    .op = .Load,
+                    .dest = reg,
+                    .symbol = id.sval.items,
+                });
+                return reg;
+            },
+            .assignment_statement => |assign| {
+                const val_reg = (try self.visit(assign.val)).?;
+                try self.builder_proc.emit(.{
+                    .op = .Store,
+                    .symbol = assign.target,
+                    .src1 = val_reg,
+                });
+
+                return null;
+            },
+            .out_statement => |out| {
+                const val_reg = (try self.visit(out.val)).?;
+                const addr_reg = (try self.visit(out.addr)).?;
+
+                try self.builder_proc.emit(.{
+                    .op = .Out,
+                    .src1 = val_reg,
+                    .src2 = addr_reg,
+                });
+                return null;
+            },
+            else => null,
         };
     }
 
     fn getOpCode(_: *Self, operator: []const u8) ?IrOpCode {
-        if (mem.eql(u8, operator, "+")) { 
+        const clean_operator = mem.trim(u8, operator, " \r\n\t\x00");
+        if (mem.eql(u8, clean_operator, "+")) {
             return .Add;
-        } else if (mem.eql(u8, operator, "*")) {
+        } else if (mem.eql(u8, clean_operator, "*")) {
             return .Mult;
         } else {
             return null;
