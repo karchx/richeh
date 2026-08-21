@@ -79,7 +79,12 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
 }
 
 pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
-    switch (inst.op) {
-        else => try writer.print("...{any}\n", .{inst}),
+    switch (inst) {
+        .Imm => |imm| try writer.print("v{d} = IMM({d})\n", .{ imm.dest, imm.imm_val }),
+        .Load => |load| try writer.print("v{d} = LOAD(\"{s}\")\n", .{ load.dest, load.symbol }),
+        .Mult => |op| try writer.print("v{d} = MULT(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
+        .Add => |op| try writer.print("v{d} = ADD(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
+        .Store => |store| try writer.print("STORE(v{d}, \"{s}\")\n", .{ store.src, store.symbol }),
+        .VolatileStore => |vs| try writer.print("VolatileStore(v{d}, v{d})\n", .{ vs.src, vs.addr }),
     }
 }

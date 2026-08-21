@@ -20,16 +20,16 @@ pub const IrOpCode = enum {
     /// Mult two register.
     Mult,
     /// Write register in port special instr in hadware.
-    Out,
+    VolatileStore,
 };
 
-pub const IrInstruction = struct {
-    op: IrOpCode,
-    dest: VReg = 0,
-    src1: VReg = 0,
-    src2: VReg = 0,
-    imm_val: u32 = 0,
-    symbol: ?[]const u8 = null, // Name variable (table symbols)
+pub const IrInstruction = union(IrOpCode) {
+    Imm: struct { dest: VReg, imm_val: u32 },
+    Load: struct { dest: VReg, symbol: []const u8 },
+    Store: struct { src: VReg, symbol: []const u8 },
+    Add: struct { dest: VReg, src1: VReg, src2: VReg },
+    Mult: struct { dest: VReg, src1: VReg, src2: VReg },
+    VolatileStore: struct { src: VReg, addr: VReg },
 };
 
 pub const IrError = error{

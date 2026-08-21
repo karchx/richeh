@@ -47,9 +47,7 @@ pub const Gen = struct {
                 };
 
                 try self.builder_proc.emit(.{
-                    .op = .Imm,
-                    .dest = reg,
-                    .imm_val = parsed_val,
+                    .Imm = .{ .dest = reg, .imm_val = parsed_val },
                 });
                 return reg;
             },
@@ -58,31 +56,31 @@ pub const Gen = struct {
                 const right_reg = (try self.visit(e.right.?)).?;
 
                 const reg = self.builder_proc.allocReg();
-                const opcode = self.getOpCode(e.op);
+                const opcode = self.getOpCode(e.op) orelse return IrError.NotImplementedOp;
 
-                try self.builder_proc.emit(.{
-                    .op = opcode.?,
-                    .dest = reg,
-                    .src1 = left_reg,
-                    .src2 = right_reg,
-                });
+                const instruction: IrInstruction = switch (opcode) {
+                    inline .Add, .Mult => |comptime_op| @unionInit(
+                        IrInstruction,
+                        @tagName(comptime_op),
+                        .{ .dest = reg, .src1 = left_reg, .src2 = right_reg },
+                    ),
+                    else => unreachable,
+                };
+
+                try self.builder_proc.emit(instruction);
                 return reg;
             },
             .identifier => |id| {
                 const reg = self.builder_proc.allocReg();
                 try self.builder_proc.emit(.{
-                    .op = .Load,
-                    .dest = reg,
-                    .symbol = id.sval.items,
+                    .Load = .{ .dest = reg, .symbol = id.sval.items },
                 });
                 return reg;
             },
             .assignment_statement => |assign| {
                 const val_reg = (try self.visit(assign.val)).?;
                 try self.builder_proc.emit(.{
-                    .op = .Store,
-                    .symbol = assign.target,
-                    .src1 = val_reg,
+                    .Store = .{ .src = val_reg, .symbol = assign.target },
                 });
 
                 return null;
@@ -92,9 +90,7 @@ pub const Gen = struct {
                 const addr_reg = (try self.visit(out.addr)).?;
 
                 try self.builder_proc.emit(.{
-                    .op = .Out,
-                    .src1 = val_reg,
-                    .src2 = addr_reg,
+                    .VolatileStore = .{ .src = val_reg, .addr = addr_reg },
                 });
                 return null;
             },
