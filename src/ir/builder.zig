@@ -32,9 +32,10 @@ pub const IrInstruction = struct {
     symbol: ?[]const u8 = null, // Name variable (table symbols)
 };
 
-pub const IrError = error {
+pub const IrError = error{
     NotImplementedYet,
     NotImplementedOp,
+    NotInstructionsYet,
 } || ParseError;
 
 pub const IrBuilder = struct {
@@ -44,20 +45,12 @@ pub const IrBuilder = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: mem.Allocator) IrError!Self {
-       const arena_ptr = allocator.create(std.heap.ArenaAllocator) catch {
-            return IrError.MemoryAllocationFailed;
-       };
-       errdefer allocator.destroy(arena_ptr);
-       arena_ptr.* = std.heap.ArenaAllocator.init(allocator);
-       errdefer arena_ptr.deinit();
-       const a = arena_ptr.allocator();
-
-       return Self{
-            .allocator = a,
-            .instructions = ArrayList(IrInstruction).init(a),
+    pub fn init(allocator: mem.Allocator) Self {
+        return Self{
+            .allocator = allocator,
+            .instructions = ArrayList(IrInstruction).init(allocator),
             .next_vreg = 0,
-       };
+        };
     }
 
     pub fn allocReg(self: *Self) VReg {

@@ -6,7 +6,6 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const current_version = builtin.zig_version;
 
-
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/lib/root.zig"),
     });
@@ -25,6 +24,14 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const pprint_mod = b.createModule(.{
+        .root_source_file = b.path("src/pprint/pprint.zig"),
+        .imports = &.{
+            .{ .name = "frontend", .module = frontend_mod },
+            .{ .name = "ir", .module = ir_mod },
+        },
+    });
+
     const cli_mod = b.createModule(.{
         .root_source_file = b.path("src/cli/cli.zig"),
     });
@@ -39,6 +46,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "frontend", .module = frontend_mod },
                 .{ .name = "cli", .module = cli_mod },
                 .{ .name = "ir", .module = ir_mod },
+                .{ .name = "pprint", .module = pprint_mod },
             },
         }),
     });
@@ -50,7 +58,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
     if (current_version.major == 0 and current_version.minor == 17) {
-        run_cmd.addPassthruArgs(); 
+        run_cmd.addPassthruArgs();
     } else {
         if (b.args) |args| {
             run_cmd.addArgs(args);

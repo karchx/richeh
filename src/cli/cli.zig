@@ -18,6 +18,8 @@ pub const CliOptions = struct {
     input_file: []const u8,
     /// Flag to control AST node printing.
     print_ast: bool,
+    /// Flag to control IR code printing.
+    print_ir: bool,
 };
 
 pub fn free_options(allocator: mem.Allocator, options: CliOptions) void {
@@ -35,6 +37,7 @@ fn print_usage(io: std.Io) void {
         \\ -version    Print version and exit
         \\ -in  <file> Input file to compile
         \\ -ast        Print Ast nodes (optional, disabled by default)
+        \\ -ir         Print IR struct code (optional, disabled bye default)
     ) catch {};
 }
 
@@ -47,6 +50,7 @@ pub fn parse_args(allocator: mem.Allocator, io: std.Io, argv: []const []const u8
 
     var input_file: ?[]const u8 = null;
     var print_ast = false;
+    var print_ir = false;
     var program_args = ArrayList([]const u8).init(allocator);
 
     errdefer {
@@ -76,6 +80,8 @@ pub fn parse_args(allocator: mem.Allocator, io: std.Io, argv: []const []const u8
             input_file = try allocator.dupe(u8, file);
         } else if (std.mem.eql(u8, arg, "-ast")) {
             print_ast = true;
+        } else if (std.mem.eql(u8, arg, "-ir")) {
+            print_ir = true;
         }
     }
 
@@ -90,5 +96,6 @@ pub fn parse_args(allocator: mem.Allocator, io: std.Io, argv: []const []const u8
     return CliOptions{
         .input_file = ifilepath,
         .print_ast = print_ast,
+        .print_ir = print_ir,
     };
 }

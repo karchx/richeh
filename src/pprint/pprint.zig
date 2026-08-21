@@ -1,5 +1,6 @@
 const std = @import("std");
-const ast = @import("ast.zig");
+const ast = @import("frontend").ast;
+const IrInstruction = @import("ir").builder.IrInstruction;
 
 fn print_indent(writer: *std.Io.Writer, depth: usize) !void {
     var i: usize = 0;
@@ -74,5 +75,11 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
             //     try print_node(el.*, writer, depth + 2);
             // }
         },
+    }
+}
+
+pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
+    switch (inst.op) {
+        else => try writer.print("...{any}\n", .{inst}),
     }
 }

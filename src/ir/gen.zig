@@ -5,6 +5,11 @@ const ast = @import("frontend").ast;
 const IrError = builder.IrError;
 const VReg = builder.VReg;
 const IrOpCode = builder.IrOpCode;
+const IrInstruction = builder.IrInstruction;
+
+fn ArrayList(comptime T: type) type {
+    return std.array_list.Managed(T);
+}
 
 pub const Gen = struct {
     builder_proc: *builder.IrBuilder,
@@ -16,9 +21,15 @@ pub const Gen = struct {
         return Self{ .builder_proc = builder_proc, .statements = stmts };
     }
 
-    pub fn generate_instruction(self: *Self) IrError!void {
+    pub fn generateInstruction(self: *Self) IrError![]const IrInstruction {
         for (self.statements) |stmt| {
             _ = try self.visit(stmt);
+        }
+
+        if (self.builder_proc.instructions.items.len > 0) {
+            return self.builder_proc.instructions.items;
+        } else {
+            return IrError.NotInstructionsYet;
         }
     }
 

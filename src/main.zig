@@ -2,9 +2,9 @@ const std = @import("std");
 const frontend = @import("frontend");
 const cli = @import("cli");
 const ir = @import("ir");
+const pprint = @import("pprint");
 const lexer = frontend.lexer;
 const parser = frontend.parser;
-const pprint = frontend.pprint;
 const irbuilder = ir.builder;
 const gen = ir.gen;
 
@@ -55,7 +55,7 @@ fn run_pipeline(ctx: anytype) void {
 
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     var pp = parser.Parse.init(&lp);
-    var builder = irbuilder.IrBuilder.init(global_allocator) catch |err| print_error_and_exit(io, err);
+    var builder = irbuilder.IrBuilder.init(global_allocator);
     defer {
         lp.deinit();
     }
@@ -64,12 +64,21 @@ fn run_pipeline(ctx: anytype) void {
     const root_node = pp.parse() catch |err| print_error_and_exit(io, err);
     const stmts = root_node.variant.program.statements;
     var generation = gen.Gen.init(&builder, stmts) catch |err| print_error_and_exit(io, err);
-    generation.generate_instruction() catch |err| print_error_and_exit(io, err);
+    const ir_instrs = generation.generateInstruction() catch |err| print_error_and_exit(io, err);
 
     if (options.print_ast) {
         var ast_buf: [65536]u8 = undefined;
         var ast_writer = std.Io.File.stdout().writer(io, &ast_buf);
         pprint.print_node(root_node, &ast_writer.interface, 0) catch |err| print_error_and_exit(io, err);
         ast_writer.interface.flush() catch |err| print_error_and_exit(io, err);
+    }
+
+    if (options.print_ir) {
+        var ir_buf: [65536]u8 = undefined;
+        var ir_writer = std.Io.File.stdout().writer(io, &ir_buf);
+        for (ir_instrs) |instr| {
+            pprint.print_ir_code(instr, &ir_writer.interface) catch |err| print_error_and_exit(io, err);
+        }
+        ir_writer.interface.flush() catch |err| print_error_and_exit(io, err);
     }
 }
