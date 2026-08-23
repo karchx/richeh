@@ -50,6 +50,11 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
             try writer.print("TargetAddress: \n", .{});
             try print_node(stmt.addr.*, writer, depth + 2);
         },
+        .wait_statement => |wstmt| {
+            try print_indent(writer, depth + 1);
+            try writer.print("Time (sec): \n", .{});
+            try print_node(wstmt.seconds.*, writer, depth + 2);
+        },
         .identifier => |data| {
             try print_indent(writer, depth + 1);
             try writer.print("Name: {s}\n", .{data.sval.items});

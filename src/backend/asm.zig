@@ -11,7 +11,7 @@ pub const Asm = struct {
     out_buffer: ArrayList(u8),
     reg_counter: u8 = 2, // init a2
     literal_counter: usize = 0,
-    const BASE_ADDR = 0x60004000;
+    v2p_map: [256]u8 = [_]u8{0} ** 256,
 
     const Self = @This();
 
@@ -39,12 +39,6 @@ pub const Asm = struct {
         try writer.print("  {s}", .{code});
     }
 
-    fn getHexValue(_: *Self, value: u32) []const u8 {
-        var buf: [10]u8 = undefined;
-        const addr = std.fmt.bufPrint(&buf, "0x{X}", .{value}) catch "0x00";
-        return addr;
-    }
-
     pub fn generate(self: *Self, instrs: []const IrInstruction) ![]const u8 {
         var writer = &self.out_buffer;
         try writer.print(".text\n", .{});
@@ -56,13 +50,16 @@ pub const Asm = struct {
         for (instrs) |instr| {
             switch (instr) {
                 .Imm => |imm| {
-                    const reg = self.getNextReg();
-                    const addr = self.getHexValue(imm.imm_val);
-                    try writer.print("  movi a{}, {s}\n", .{ reg, addr });
+                    const physical_reg = self.getNextReg();
+
+                    self.v2p_map[imm.dest] = physical_reg;
+
+                    try writer.print("  movi a{}, 0x{x}\n", .{ physical_reg, imm.imm_val });
                 },
                 .VolatileStore => |vs| {
-                    const offset = self.getHexValue(vs.offset);
-                    try writer.print("  s32i a{}, a{}, {s}\n", .{ vs.pin + 2, vs.base_addr + 2, offset });
+                    const preg_base = self.v2p_map[vs.base_addr];
+                    const preg_pin = self.v2p_map[vs.pin];
+                    try writer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
                 },
                 else => std.debug.print("\n", .{}),
             }

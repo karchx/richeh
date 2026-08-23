@@ -2,3 +2,5 @@
 
 out(1, 5)
 
+-- seconds
+wait(5)

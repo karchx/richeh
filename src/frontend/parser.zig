@@ -119,16 +119,14 @@ pub const Parse = struct {
         };
     }
 
-    fn create_out_node(self: *Self, tok: token.Token) ParseError!ast.Node {
+    fn create_out_wait_node(self: *Self, tok: token.Token) ParseError!ast.Node {
         const next_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
 
         // The next token not is LParen
-        // A correct out statement node is: `out(expr)`
+        // A correct out or wait statement node is e.g: `out(expr)`
         if (next_tok.type != .LParen) return ParseError.InvalidToken;
 
-        var val_list = ArrayList(*ast.Node).init(self.lexer_proc.allocator);
-        errdefer val_list.deinit();
-        const addr_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+        const keyword = tok.data.sval.items;
 
         _ = self.token_next() orelse return ParseError.UnexpectedEOF;
 
@@ -136,26 +134,38 @@ pub const Parse = struct {
         const node_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
         node_ptr.* = node_val;
 
-        const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
-        if (delim.type == .Comma) {
-            const addr_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
-            if (addr_tok.type == .Number) {
-                const addr_val = try self.parse_expr(0);
-                addr_ptr.* = addr_val;
+        if (mem.eql(u8, "out", keyword)) {
+            const addr_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+            const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
+            if (delim.type == .Comma) {
+                const addr_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
+                if (addr_tok.type == .Number) {
+                    const addr_val = try self.parse_expr(0);
+                    addr_ptr.* = addr_val;
+                }
+            } else {
+                return ParseError.InvalidToken;
             }
-        } else {
-            return ParseError.InvalidToken;
-        }
 
-        return ast.Node{
-            .pos = tok.pos,
-            .variant = .{
-                .out_statement = .{
-                    .val = node_ptr,
-                    .addr = addr_ptr,
+            return ast.Node{
+                .pos = tok.pos,
+                .variant = .{
+                    .out_statement = .{
+                        .val = node_ptr,
+                        .addr = addr_ptr,
+                    },
                 },
-            },
-        };
+            };
+        } else {
+            return ast.Node{
+                .pos = tok.pos,
+                .variant = .{
+                    .wait_statement = .{
+                        .seconds = node_ptr,
+                    },
+                },
+            };
+        }
     }
 
     fn parse_group_or_matrix(self: *Self, tok: token.Token) ParseError!ast.Node {
@@ -239,7 +249,7 @@ pub const Parse = struct {
         return try switch (tok.type) {
             .Number => self.create_number_node(tok),
             .Identifier => self.create_identifier_node(tok),
-            .Keyword => self.create_out_node(tok),
+            .Keyword => self.create_out_wait_node(tok),
             .LParen => try self.parse_group_or_matrix(tok),
             else => ParseError.InvalidToken,
         };

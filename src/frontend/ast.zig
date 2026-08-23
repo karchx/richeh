@@ -37,6 +37,10 @@ pub const Node = struct {
             val: *Node,
             addr: *Node, // address output, pin_number or hex_number
         },
+        /// The waith statement in seconds.
+        wait_statement: struct {
+            seconds: *Node,
+        },
         // The matrix node.
         matrix: struct {
             rows: usize,

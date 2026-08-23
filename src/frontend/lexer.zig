@@ -268,7 +268,7 @@ pub const Lexer = struct {
             }
         }.call);
 
-        if (mem.eql(u8, "out", buffer.items)) {
+        if (mem.eql(u8, "out", buffer.items) or mem.eql(u8, "wait", buffer.items)) {
             return token.Token{
                 .type = .Keyword,
                 .data = .{ .sval = buffer },
