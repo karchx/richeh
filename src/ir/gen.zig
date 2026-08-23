@@ -86,11 +86,52 @@ pub const Gen = struct {
                 return null;
             },
             .out_statement => |out| {
-                const val_reg = (try self.visit(out.val)).?;
-                const addr_reg = (try self.visit(out.addr)).?;
+                const mask_pin = switch (out.addr.variant) {
+                    .number => |val| @as(c_longlong, 1) << @intCast(val.llnum),
+                    else => 0,
+                };
 
+                var mask_pin_hex = ast.Node{
+                    .variant = .{
+                        .number = .{
+                            .llnum = mask_pin,
+                        },
+                    },
+                };
+                const mask_pin_reg = (try self.visit(&mask_pin_hex)).?;
+
+                var val_base_addrs = ArrayList(u8).init(self.builder_proc.allocator);
+                defer val_base_addrs.deinit();
+                // BASE ADDRESS ESP32-S3: 0x60004000
+                val_base_addrs.appendSlice("60004000") catch {
+                    return IrError.MemoryAllocationFailed;
+                };
+
+                var base_addr = ast.Node{
+                    .variant = .{
+                        .number = .{
+                            .sval = val_base_addrs,
+                        },
+                    },
+                };
+
+                const base_addr_reg = (try self.visit(&base_addr)).?;
+
+                // SET OUTPUT PIN
+                // 36 = 0x24
                 try self.builder_proc.emit(.{
-                    .VolatileStore = .{ .src = val_reg, .addr = addr_reg },
+                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = 36 },
+                });
+
+                // offset pulse for HIGH or LOW
+                // HIGH = 8 = 0x08
+                // LOW = 12 = 0x0C
+                const offset_pulse: VReg = switch (out.val.variant) {
+                    .number => |val| if (val.llnum == 1) 8 else 12,
+                    else => 0,
+                };
+                try self.builder_proc.emit(.{
+                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = offset_pulse },
                 });
                 return null;
             },

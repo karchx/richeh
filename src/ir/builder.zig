@@ -29,7 +29,7 @@ pub const IrInstruction = union(IrOpCode) {
     Store: struct { src: VReg, symbol: []const u8 },
     Add: struct { dest: VReg, src1: VReg, src2: VReg },
     Mult: struct { dest: VReg, src1: VReg, src2: VReg },
-    VolatileStore: struct { src: VReg, addr: VReg },
+    VolatileStore: struct { base_addr: VReg, pin: VReg, offset: VReg },
 };
 
 pub const IrError = error{
