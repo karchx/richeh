@@ -3,6 +3,7 @@ const frontend = @import("frontend");
 const cli = @import("cli");
 const ir = @import("ir");
 const pprint = @import("pprint");
+const backend = @import("backend");
 const lexer = frontend.lexer;
 const parser = frontend.parser;
 const irbuilder = ir.builder;
@@ -53,18 +54,27 @@ fn run_pipeline(ctx: anytype) void {
     const options = ctx.options;
     const io = ctx.io;
 
+    // Frontend
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     var pp = parser.Parse.init(&lp);
     var builder = irbuilder.IrBuilder.init(global_allocator);
+    var codegen = backend.genasm.Asm.init(global_allocator);
     defer {
         lp.deinit();
+        codegen.deinit();
     }
 
     lp.lex() catch |err| print_error_and_exit(io, err);
     const root_node = pp.parse() catch |err| print_error_and_exit(io, err);
     const stmts = root_node.variant.program.statements;
+
+    // IR
     var generation = gen.Gen.init(&builder, stmts) catch |err| print_error_and_exit(io, err);
     const ir_instrs = generation.generateInstruction() catch |err| print_error_and_exit(io, err);
+
+    // Codegen asm
+    const asmcode = codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);
+    std.debug.print("{s}\n", .{asmcode});
 
     if (options.print_ast) {
         var ast_buf: [65536]u8 = undefined;

@@ -24,6 +24,13 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const backend_mod = b.createModule(.{
+        .root_source_file = b.path("src/backend/root.zig"),
+        .imports = &.{
+            .{ .name = "ir", .module = ir_mod },
+        },
+    });
+
     const pprint_mod = b.createModule(.{
         .root_source_file = b.path("src/pprint/pprint.zig"),
         .imports = &.{
@@ -46,6 +53,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "frontend", .module = frontend_mod },
                 .{ .name = "cli", .module = cli_mod },
                 .{ .name = "ir", .module = ir_mod },
+                .{ .name = "backend", .module = backend_mod },
                 .{ .name = "pprint", .module = pprint_mod },
             },
         }),

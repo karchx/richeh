@@ -85,6 +85,6 @@ pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
         .Mult => |op| try writer.print("v{d} = MULT(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
         .Add => |op| try writer.print("v{d} = ADD(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
         .Store => |store| try writer.print("STORE(v{d}, \"{s}\")\n", .{ store.src, store.symbol }),
-        .VolatileStore => |vs| try writer.print("VolatileStore(base=v{d}, value=v{d}, offset={d})\n", .{ vs.base_addr, vs.pin, vs.offset }),
+        .VolatileStore => |vs| try writer.print("VolatileStore(base_addr=v{d}, pin=v{d}, offset={d})\n", .{ vs.base_addr, vs.pin, vs.offset }),
     }
 }

@@ -1,4 +1,4 @@
 -- this is comment
-x = 50
 
-out(x * 2, 0x60004000)
+out(1, 5)
+
