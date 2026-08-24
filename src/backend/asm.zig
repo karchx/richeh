@@ -51,15 +51,26 @@ pub const Asm = struct {
             switch (instr) {
                 .Imm => |imm| {
                     const physical_reg = self.getNextReg();
-
                     self.v2p_map[imm.dest] = physical_reg;
 
                     try writer.print("  movi a{}, 0x{x}\n", .{ physical_reg, imm.imm_val });
+                },
+                .LoadLiteral => |llit| {
+                    const physical_reg = self.getNextReg();
+                    self.v2p_map[llit.dest] = physical_reg;
+
+                    try writer.print("  l32r a{}, {d}\n", .{ physical_reg, llit.literal_val });
                 },
                 .VolatileStore => |vs| {
                     const preg_base = self.v2p_map[vs.base_addr];
                     const preg_pin = self.v2p_map[vs.pin];
                     try writer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
+                },
+                .Loop => |loop| {
+                    const preg = self.v2p_map[loop.src];
+                    try writer.print("  loop a{}, .{s}\n", .{ preg, loop.tag });
+                    try printIndent(writer, "nop\n");
+                    try writer.print(".{s}: \n", .{loop.tag});
                 },
                 else => std.debug.print("\n", .{}),
             }

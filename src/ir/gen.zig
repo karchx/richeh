@@ -37,7 +37,6 @@ pub const Gen = struct {
         return switch (node.variant) {
             .program => null,
             .number => |num| {
-                const reg = self.builder_proc.allocReg();
                 const parsed_val = switch (num) {
                     .llnum => |l| @as(u32, @intCast(l)),
                     .sval => |s| std.fmt.parseInt(u32, s.items, 16) catch {
@@ -46,9 +45,16 @@ pub const Gen = struct {
                     else => 0,
                 };
 
+                const loaded_reg = self.builder_proc.lvn_map.get(parsed_val);
+                if (loaded_reg) |find_reg| return find_reg;
+
+                const reg = self.builder_proc.allocReg();
+                self.builder_proc.lvn_map.put(parsed_val, reg) catch return IrError.MemoryAllocationFailed;
+
                 try self.builder_proc.emit(.{
                     .Imm = .{ .dest = reg, .imm_val = parsed_val },
                 });
+
                 return reg;
             },
             .exp => |e| {
@@ -134,6 +140,21 @@ pub const Gen = struct {
                     .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = offset_pulse },
                 });
                 return null;
+            },
+            .wait_statement => |wait| {
+                const FREQ_CPU_DEFAULT: u32 = 160_000_000;
+                const seconds: u32 = @intCast(wait.seconds.variant.number.llnum);
+                const iterations = seconds * FREQ_CPU_DEFAULT;
+                const reg = self.builder_proc.allocReg();
+
+                try self.builder_proc.emit(.{
+                    .LoadLiteral = .{ .dest = reg, .literal_val = iterations },
+                });
+
+                try self.builder_proc.emit(.{
+                    .Loop = .{ .src = reg, .tag = "delay_" },
+                });
+                return reg;
             },
             else => null,
         };
