@@ -8,22 +8,38 @@ fn ArrayList(comptime T: type) type {
 
 pub const Asm = struct {
     allocator: mem.Allocator,
-    out_buffer: ArrayList(u8),
+    lit_buffer: ArrayList(u8),
+    text_buffer: ArrayList(u8),
     reg_counter: u8 = 2, // init a2
     literal_counter: usize = 0,
+    ofile: ?std.Io.File = null,
+    io: std.Io,
     v2p_map: [256]u8 = [_]u8{0} ** 256,
 
     const Self = @This();
 
-    pub fn init(allocator: mem.Allocator) Self {
+    fn globalIo() std.Io {
+        return std.Io.Threaded.global_single_threaded.io();
+    }
+
+    pub fn init(allocator: mem.Allocator) !Self {
+        const io = globalIo();
+        const f = std.Io.Dir.cwd().createFile(io, "o.S", .{}) catch null;
+        errdefer if (f) |ff| ff.close(io);
+
         return Self{
             .allocator = allocator,
-            .out_buffer = ArrayList(u8).init(allocator),
+            .lit_buffer = ArrayList(u8).init(allocator),
+            .text_buffer = ArrayList(u8).init(allocator),
+            .ofile = f,
+            .io = io,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.out_buffer.deinit();
+        if (self.ofile) |f| f.close(self.io);
+        self.text_buffer.deinit();
+        self.lit_buffer.deinit();
     }
 
     fn getNextReg(self: *Self) u8 {
@@ -39,8 +55,12 @@ pub const Asm = struct {
         try writer.print("  {s}", .{code});
     }
 
-    pub fn generate(self: *Self, instrs: []const IrInstruction) ![]const u8 {
-        var writer = &self.out_buffer;
+    pub fn generate(self: *Self, instrs: []const IrInstruction) !void {
+        var writer = &self.text_buffer;
+        var lit_writer = &self.lit_buffer;
+
+        try lit_writer.print("/* LITERAL SECTION */\n", .{});
+
         try writer.print(".text\n", .{});
         try writer.print(".align 4\n", .{});
         try writer.print(".global app_main\n", .{});
@@ -58,8 +78,8 @@ pub const Asm = struct {
                 .LoadLiteral => |llit| {
                     const physical_reg = self.getNextReg();
                     self.v2p_map[llit.dest] = physical_reg;
-
-                    try writer.print("  l32r a{}, {d}\n", .{ physical_reg, llit.literal_val });
+                    try lit_writer.print(".literal {s}_{}, {d}\n\n", .{ "LITERAL", physical_reg, llit.literal_val });
+                    try writer.print("  l32r a{}, {s}_{}\n", .{ physical_reg, "LITERAL", physical_reg });
                 },
                 .VolatileStore => |vs| {
                     const preg_base = self.v2p_map[vs.base_addr];
@@ -77,6 +97,7 @@ pub const Asm = struct {
         }
 
         try printIndent(writer, "retw.n\n");
-        return self.out_buffer.items;
+        try self.ofile.?.writeStreamingAll(self.io, self.lit_buffer.items);
+        try self.ofile.?.writeStreamingAll(self.io, self.text_buffer.items);
     }
 };

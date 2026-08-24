@@ -58,7 +58,7 @@ fn run_pipeline(ctx: anytype) void {
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     var pp = parser.Parse.init(&lp);
     var builder = irbuilder.IrBuilder.init(global_allocator);
-    var codegen = backend.genasm.Asm.init(global_allocator);
+    var codegen = backend.genasm.Asm.init(global_allocator) catch |err| print_error_and_exit(io, err);
     defer {
         lp.deinit();
         codegen.deinit();
@@ -73,8 +73,7 @@ fn run_pipeline(ctx: anytype) void {
     const ir_instrs = generation.generateInstruction() catch |err| print_error_and_exit(io, err);
 
     // Codegen asm
-    const asmcode = codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);
-    std.debug.print("{s}\n", .{asmcode});
+    codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);
 
     if (options.print_ast) {
         var ast_buf: [65536]u8 = undefined;

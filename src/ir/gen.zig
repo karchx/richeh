@@ -122,12 +122,15 @@ pub const Gen = struct {
                 };
 
                 const base_addr_reg = (try self.visit(&base_addr)).?;
-
+                const memory_state = self.builder_proc.track_memory_state.get(base_addr_reg);
                 // SET OUTPUT PIN
                 // 36 = 0x24
-                try self.builder_proc.emit(.{
-                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = 36 },
-                });
+                if (memory_state == null or memory_state.? != mask_pin_reg) {
+                    try self.builder_proc.emit(.{
+                        .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = 36 },
+                    });
+                    self.builder_proc.track_memory_state.put(base_addr_reg, mask_pin_reg) catch return IrError.MemoryAllocationFailed;
+                }
 
                 // offset pulse for HIGH or LOW
                 // HIGH = 8 = 0x08
@@ -136,9 +139,11 @@ pub const Gen = struct {
                     .number => |val| if (val.llnum == 1) 8 else 12,
                     else => 0,
                 };
+
                 try self.builder_proc.emit(.{
                     .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = offset_pulse },
                 });
+
                 return null;
             },
             .wait_statement => |wait| {

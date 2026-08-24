@@ -47,7 +47,10 @@ pub const IrError = error{
 pub const IrBuilder = struct {
     allocator: mem.Allocator,
     instructions: ArrayList(IrInstruction),
+    // key = value, value = reg
     lvn_map: std.AutoHashMap(u32, VReg),
+    // key = base_addr + offset, value = pin
+    track_memory_state: std.AutoHashMap(u32, u32),
     next_vreg: VReg,
 
     const Self = @This();
@@ -57,6 +60,7 @@ pub const IrBuilder = struct {
             .allocator = allocator,
             .instructions = ArrayList(IrInstruction).init(allocator),
             .lvn_map = std.AutoHashMap(u32, VReg).init(allocator),
+            .track_memory_state = std.AutoHashMap(VReg, u32).init(allocator),
             .next_vreg = 0,
         };
     }
@@ -71,15 +75,5 @@ pub const IrBuilder = struct {
         self.instructions.append(inst) catch {
             return IrError.MemoryAllocationFailed;
         };
-    }
-
-    pub fn trackLoadedRegister(self: *Self, key: u32, reg: VReg) ?VReg {
-        const loaded_reg = self.lvn_map.get(key);
-        if (loaded_reg) |find_reg| {
-            return find_reg;
-        } else {
-            self.lvn_map.put(key, reg);
-            return null;
-        }
     }
 };
