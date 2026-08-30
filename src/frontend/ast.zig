@@ -16,6 +16,10 @@ pub const Node = struct {
         program: struct {
             statements: []const *Node,
         },
+        /// The loop infinite implicited.
+        // main_loop: struct {
+        //     statements: []const *Node,
+        // },
         /// The expresion node.
         exp: struct {
             left: ?*Node = null,

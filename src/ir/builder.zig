@@ -23,8 +23,8 @@ pub const IrOpCode = enum {
     Mult,
     /// Write register in port special instr in hadware.
     VolatileStore,
-    /// Loop instruction
-    Loop,
+    /// Call external function
+    CallExternal,
 };
 
 pub const IrInstruction = union(IrOpCode) {
@@ -35,7 +35,7 @@ pub const IrInstruction = union(IrOpCode) {
     Add: struct { dest: VReg, src1: VReg, src2: VReg },
     Mult: struct { dest: VReg, src1: VReg, src2: VReg },
     VolatileStore: struct { base_addr: VReg, pin: u32, offset: u32 },
-    Loop: struct { src: VReg, tag: []const u8 },
+    CallExternal: struct { src: VReg, target: []const u8 },
 };
 
 pub const IrError = error{

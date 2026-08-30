@@ -147,17 +147,17 @@ pub const Gen = struct {
                 return null;
             },
             .wait_statement => |wait| {
-                const FREQ_CPU_DEFAULT: u32 = 160_000_000;
+                const FREQ_CPU_DEFAULT: u32 = 100; // FREQ IN Hz
                 const seconds: u32 = @intCast(wait.seconds.variant.number.llnum);
-                const iterations = seconds * FREQ_CPU_DEFAULT;
+                const ticks = seconds * FREQ_CPU_DEFAULT;
                 const reg = self.builder_proc.allocReg();
 
                 try self.builder_proc.emit(.{
-                    .LoadLiteral = .{ .dest = reg, .literal_val = iterations },
+                    .LoadLiteral = .{ .dest = reg, .literal_val = ticks },
                 });
 
                 try self.builder_proc.emit(.{
-                    .Loop = .{ .src = reg, .tag = "delay_" },
+                    .CallExternal = .{ .src = reg, .target = "vTaskDelay" },
                 });
                 return reg;
             },

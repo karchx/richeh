@@ -63,7 +63,7 @@ pub const Asm = struct {
 
         try writer.print(".text\n", .{});
         try writer.print(".align 4\n", .{});
-        try writer.print(".global app_main\n", .{});
+        try writer.print(".global app_main\n\n", .{});
         try writer.print("app_main:\n", .{});
         try printIndent(writer, "entry a1, 32\n");
 
@@ -73,24 +73,26 @@ pub const Asm = struct {
                     const physical_reg = self.getNextReg();
                     self.v2p_map[imm.dest] = physical_reg;
 
-                    try writer.print("  movi a{}, 0x{x}\n", .{ physical_reg, imm.imm_val });
+                    try writer.print("  /* IMMEDIATE SECTION*/\n", .{});
+                    try writer.print("  movi a{}, 0x{x}\n\n", .{ physical_reg, imm.imm_val });
                 },
                 .LoadLiteral => |llit| {
                     const physical_reg = self.getNextReg();
                     self.v2p_map[llit.dest] = physical_reg;
-                    try lit_writer.print(".literal {s}_{}, {d}\n\n", .{ "LITERAL", physical_reg, llit.literal_val });
-                    try writer.print("  l32r a{}, {s}_{}\n", .{ physical_reg, "LITERAL", physical_reg });
+                    try lit_writer.print(".literal {s}_{}, {d}\n\n", .{ "DELAY_TICKS", physical_reg, llit.literal_val });
+                    try writer.print("  l32r a{}, {s}_{}\n\n", .{ physical_reg, "DELAY_TICKS", physical_reg });
                 },
                 .VolatileStore => |vs| {
                     const preg_base = self.v2p_map[vs.base_addr];
                     const preg_pin = self.v2p_map[vs.pin];
                     try writer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
                 },
-                .Loop => |loop| {
-                    const preg = self.v2p_map[loop.src];
-                    try writer.print("  loop a{}, .{s}\n", .{ preg, loop.tag });
-                    try printIndent(writer, "nop\n");
-                    try writer.print(".{s}: \n", .{loop.tag});
+                .CallExternal => |ce| {
+                    const preg = self.v2p_map[ce.src];
+                    if (preg != 6) {
+                        try writer.print("  mov a6, a{}\n\n", .{preg});
+                    }
+                    try writer.print("  call4 {s}\n\n", .{ce.target});
                 },
                 else => std.debug.print("\n", .{}),
             }
