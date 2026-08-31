@@ -23,7 +23,20 @@ pub const Gen = struct {
 
     pub fn generateInstruction(self: *Self) IrError![]const IrInstruction {
         for (self.statements) |stmt| {
-            _ = try self.visit(stmt);
+            switch (stmt.variant) {
+                .main_loop => |loop| {
+                    try self.builder_proc.emit(.{
+                        .Label = ".main_loop",
+                    });
+                    for (loop.statements) |main_stmt| {
+                        _ = try self.visit(main_stmt);
+                    }
+                    try self.builder_proc.emit(.{
+                        .Jump = ".main_loop",
+                    });
+                },
+                else => {},
+            }
         }
 
         if (self.builder_proc.instructions.items.len > 0) {

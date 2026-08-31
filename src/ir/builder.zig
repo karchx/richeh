@@ -25,6 +25,10 @@ pub const IrOpCode = enum {
     VolatileStore,
     /// Call external function
     CallExternal,
+    /// Label
+    Label,
+    /// Jump
+    Jump,
 };
 
 pub const IrInstruction = union(IrOpCode) {
@@ -36,6 +40,8 @@ pub const IrInstruction = union(IrOpCode) {
     Mult: struct { dest: VReg, src1: VReg, src2: VReg },
     VolatileStore: struct { base_addr: VReg, pin: u32, offset: u32 },
     CallExternal: struct { src: VReg, target: []const u8 },
+    Label: []const u8,
+    Jump: []const u8,
 };
 
 pub const IrError = error{

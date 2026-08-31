@@ -5,3 +5,5 @@ out(1, 5)
 wait(5)
 
 out(0, 5)
+
+wait(5)

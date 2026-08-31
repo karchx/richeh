@@ -336,11 +336,24 @@ pub const Parse = struct {
             return ParseError.MemoryAllocationFailed;
         };
 
-        return ast.Node{
+        const loop_node = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
+        loop_node.* = ast.Node{
             .pos = if (statements_slice.len > 0) statements_slice[0].pos else null,
             .variant = .{
-                .program = .{
+                .main_loop = .{
                     .statements = statements_slice,
+                },
+            },
+        };
+
+        var prog_statements = self.lexer_proc.allocator.alloc(*ast.Node, 1) catch return ParseError.MemoryAllocationFailed;
+        prog_statements[0] = loop_node;
+
+        return ast.Node{
+            .pos = loop_node.pos,
+            .variant = .{
+                .program = .{
+                    .statements = prog_statements,
                 },
             },
         };

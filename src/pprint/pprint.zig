@@ -21,6 +21,13 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
                 try print_node(stmt.*, writer, depth + 2);
             }
         },
+        .main_loop => |main| {
+            try print_indent(writer, depth + 1);
+            try writer.print("Main: \n", .{});
+            for (main.statements) |stmt| {
+                try print_node(stmt.*, writer, depth + 2);
+            }
+        },
         .exp => |exp| {
             if (exp.op.len > 0) {
                 try print_indent(writer, depth + 1);
@@ -85,6 +92,7 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
 
 pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
     switch (inst) {
+        .Label => |label| try writer.print("Label({s})\n", .{label}),
         .Imm => |imm| try writer.print("v{d} = IMM({d})\n", .{ imm.dest, imm.imm_val }),
         .Load => |load| try writer.print("v{d} = LOAD(\"{s}\")\n", .{ load.dest, load.symbol }),
         .LoadLiteral => |llit| try writer.print("v{d} = LOADLIT({d})\n", .{ llit.dest, llit.literal_val }),
@@ -93,5 +101,6 @@ pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
         .Store => |store| try writer.print("STORE(v{d}, \"{s}\")\n", .{ store.src, store.symbol }),
         .VolatileStore => |vs| try writer.print("VolatileStore(base_addr=v{d}, pin=v{d}, offset={d})\n", .{ vs.base_addr, vs.pin, vs.offset }),
         .CallExternal => |ce| try writer.print("CallExternal(target=\"{s}\", args=v{})\n", .{ ce.target, ce.src }),
+        .Jump => |jump| try writer.print("Jump({s})\n", .{jump}),
     }
 }

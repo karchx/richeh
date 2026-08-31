@@ -8,6 +8,7 @@ fn ArrayList(comptime T: type) type {
 
 pub const Asm = struct {
     allocator: mem.Allocator,
+    app_buffer: ArrayList(u8), // app section and config instruction
     lit_buffer: ArrayList(u8),
     text_buffer: ArrayList(u8),
     reg_counter: u8 = 2, // init a2
@@ -29,6 +30,7 @@ pub const Asm = struct {
 
         return Self{
             .allocator = allocator,
+            .app_buffer = ArrayList(u8).init(allocator),
             .lit_buffer = ArrayList(u8).init(allocator),
             .text_buffer = ArrayList(u8).init(allocator),
             .ofile = f,
@@ -40,6 +42,7 @@ pub const Asm = struct {
         if (self.ofile) |f| f.close(self.io);
         self.text_buffer.deinit();
         self.lit_buffer.deinit();
+        self.app_buffer.deinit();
     }
 
     fn getNextReg(self: *Self) u8 {
@@ -58,23 +61,31 @@ pub const Asm = struct {
     pub fn generate(self: *Self, instrs: []const IrInstruction) !void {
         var writer = &self.text_buffer;
         var lit_writer = &self.lit_buffer;
+        var app_buffer = &self.app_buffer;
 
         try lit_writer.print("/* LITERAL SECTION */\n", .{});
 
-        try writer.print(".text\n", .{});
-        try writer.print(".align 4\n", .{});
-        try writer.print(".global app_main\n\n", .{});
-        try writer.print("app_main:\n", .{});
-        try printIndent(writer, "entry a1, 32\n");
+        try app_buffer.print(".text\n", .{});
+        try app_buffer.print(".align 4\n", .{});
+        try app_buffer.print(".global app_main\n\n", .{});
+        try app_buffer.print("app_main:\n", .{});
+        try printIndent(app_buffer, "entry a1, 32\n");
+        try app_buffer.print("  /* CONFIG REGISTERS */\n", .{});
 
         for (instrs) |instr| {
             switch (instr) {
+                .Label => |label| {
+                    try writer.print("\n{s}:\n", .{label});
+                },
                 .Imm => |imm| {
                     const physical_reg = self.getNextReg();
                     self.v2p_map[imm.dest] = physical_reg;
-
-                    try writer.print("  /* IMMEDIATE SECTION*/\n", .{});
-                    try writer.print("  movi a{}, 0x{x}\n\n", .{ physical_reg, imm.imm_val });
+                    // imm_val is 32 in decimal assign GPIO5 TODO: create map for values GPIO in decimal or hex
+                    if (imm.imm_val == 32 or imm.imm_val == 1610629120) {
+                        try app_buffer.print("  movi a{}, 0x{x}\n", .{ physical_reg, imm.imm_val });
+                    } else {
+                        try writer.print("  movi a{}, 0x{x}\n\n", .{ physical_reg, imm.imm_val });
+                    }
                 },
                 .LoadLiteral => |llit| {
                     const physical_reg = self.getNextReg();
@@ -85,8 +96,14 @@ pub const Asm = struct {
                 .VolatileStore => |vs| {
                     const preg_base = self.v2p_map[vs.base_addr];
                     const preg_pin = self.v2p_map[vs.pin];
-                    try writer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
+                    // TODO: refactor
+                    if (vs.offset == 36) {
+                        try app_buffer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
+                    } else {
+                        try writer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
+                    }
                 },
+
                 .CallExternal => |ce| {
                     const preg = self.v2p_map[ce.src];
                     if (preg != 6) {
@@ -94,12 +111,16 @@ pub const Asm = struct {
                     }
                     try writer.print("  call4 {s}\n\n", .{ce.target});
                 },
+                .Jump => |jump| {
+                    try writer.print("  j {s}\n", .{jump});
+                },
                 else => std.debug.print("\n", .{}),
             }
         }
 
-        try printIndent(writer, "retw.n\n");
+        try printIndent(writer, "\n");
         try self.ofile.?.writeStreamingAll(self.io, self.lit_buffer.items);
+        try self.ofile.?.writeStreamingAll(self.io, self.app_buffer.items);
         try self.ofile.?.writeStreamingAll(self.io, self.text_buffer.items);
     }
 };
