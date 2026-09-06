@@ -138,11 +138,8 @@ pub const Parse = struct {
             const addr_ptr = self.lexer_proc.allocator.create(ast.Node) catch return ParseError.MemoryAllocationFailed;
             const delim = self.token_next() orelse return ParseError.UnexpectedEOF;
             if (delim.type == .Comma) {
-                const addr_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
-                if (addr_tok.type == .Number) {
-                    const addr_val = try self.parse_expr(0);
-                    addr_ptr.* = addr_val;
-                }
+                const addr_val = try self.parse_expr(0);
+                addr_ptr.* = addr_val;
             } else {
                 return ParseError.InvalidToken;
             }

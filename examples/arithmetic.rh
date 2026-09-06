@@ -1,9 +1,14 @@
 -- this is comment
 
-out(1, 5)
+pin = 5
 
-wait(5)
+out(1, pin)
 
-out(0, 5)
+-- out(0, pin)
 
-wait(5)
+-- wait(5)
+-- 
+-- out(0, pin)
+-- 
+-- wait(5)
+

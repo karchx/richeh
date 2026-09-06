@@ -14,6 +14,7 @@ fn ArrayList(comptime T: type) type {
 pub const Gen = struct {
     builder_proc: *builder.IrBuilder,
     statements: []const *ast.Node,
+    gpio_base: VReg = 0,
 
     const Self = @This();
 
@@ -21,7 +22,10 @@ pub const Gen = struct {
         return Self{ .builder_proc = builder_proc, .statements = stmts };
     }
 
-    pub fn generateInstruction(self: *Self) IrError![]const IrInstruction {
+    pub fn generateInstruction(self: *Self) IrError![]IrInstruction {
+        const gpio_reg = self.builder_proc.constAddress() catch return IrError.MemoryAllocationFailed;
+        self.gpio_base = gpio_reg;
+
         for (self.statements) |stmt| {
             switch (stmt.variant) {
                 .main_loop => |loop| {
@@ -105,45 +109,21 @@ pub const Gen = struct {
                 return null;
             },
             .out_statement => |out| {
-                const mask_pin = switch (out.addr.variant) {
-                    .number => |val| @as(c_longlong, 1) << @intCast(val.llnum),
-                    else => 0,
-                };
+                const pin_reg = (try self.visit(out.addr)).?;
 
-                var mask_pin_hex = ast.Node{
-                    .variant = .{
-                        .number = .{
-                            .llnum = mask_pin,
-                        },
-                    },
-                };
-                const mask_pin_reg = (try self.visit(&mask_pin_hex)).?;
+                const one = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{ .Imm = .{ .dest = one, .imm_val = 1 } });
 
-                var val_base_addrs = ArrayList(u8).init(self.builder_proc.allocator);
-                defer val_base_addrs.deinit();
-                // BASE ADDRESS ESP32-S3: 0x60004000
-                val_base_addrs.appendSlice("60004000") catch {
-                    return IrError.MemoryAllocationFailed;
-                };
+                const mask_reg = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{ .Shl = .{ .dest = mask_reg, .src1 = one, .src2 = pin_reg } });
 
-                var base_addr = ast.Node{
-                    .variant = .{
-                        .number = .{
-                            .sval = val_base_addrs,
-                        },
-                    },
-                };
+                const base_addr_reg = self.gpio_base;
 
-                const base_addr_reg = (try self.visit(&base_addr)).?;
-                const memory_state = self.builder_proc.track_memory_state.get(base_addr_reg);
                 // SET OUTPUT PIN
                 // 36 = 0x24
-                if (memory_state == null or memory_state.? != mask_pin_reg) {
-                    try self.builder_proc.emit(.{
-                        .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = 36 },
-                    });
-                    self.builder_proc.track_memory_state.put(base_addr_reg, mask_pin_reg) catch return IrError.MemoryAllocationFailed;
-                }
+                try self.builder_proc.emit(.{
+                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = 36 },
+                });
 
                 // offset pulse for HIGH or LOW
                 // HIGH = 8 = 0x08
@@ -154,7 +134,7 @@ pub const Gen = struct {
                 };
 
                 try self.builder_proc.emit(.{
-                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_pin_reg, .offset = offset_pulse },
+                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = offset_pulse },
                 });
 
                 return null;

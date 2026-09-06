@@ -8,6 +8,7 @@ const lexer = frontend.lexer;
 const parser = frontend.parser;
 const irbuilder = ir.builder;
 const gen = ir.gen;
+const ir_optpass = ir.optpasses;
 
 fn print_error_and_exit(io: std.Io, err: anyerror) noreturn {
     const stderr = std.Io.File.stderr();
@@ -58,6 +59,7 @@ fn run_pipeline(ctx: anytype) void {
     var lp = lexer.Lexer.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     var pp = parser.Parse.init(&lp);
     var builder = irbuilder.IrBuilder.init(global_allocator);
+    var opt_pass = ir_optpass.OptPasses.init(global_allocator) catch |err| print_error_and_exit(io, err);
     var codegen = backend.genasm.Asm.init(global_allocator) catch |err| print_error_and_exit(io, err);
     defer {
         lp.deinit();
@@ -70,7 +72,8 @@ fn run_pipeline(ctx: anytype) void {
 
     // IR
     var generation = gen.Gen.init(&builder, stmts) catch |err| print_error_and_exit(io, err);
-    const ir_instrs = generation.generateInstruction() catch |err| print_error_and_exit(io, err);
+    var ir_instrs = generation.generateInstruction() catch |err| print_error_and_exit(io, err);
+    opt_pass.constantFolding(&ir_instrs) catch |err| print_error_and_exit(io, err);
 
     // Codegen asm
     codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);

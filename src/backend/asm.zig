@@ -58,7 +58,7 @@ pub const Asm = struct {
         try writer.print("  {s}", .{code});
     }
 
-    pub fn generate(self: *Self, instrs: []const IrInstruction) !void {
+    pub fn generate(self: *Self, instrs: []IrInstruction) !void {
         var writer = &self.text_buffer;
         var lit_writer = &self.lit_buffer;
         var app_buffer = &self.app_buffer;

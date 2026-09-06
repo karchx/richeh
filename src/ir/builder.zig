@@ -21,6 +21,8 @@ pub const IrOpCode = enum {
     Add,
     /// Mult two register.
     Mult,
+    /// Shl bit operator.
+    Shl,
     /// Write register in port special instr in hadware.
     VolatileStore,
     /// Call external function
@@ -38,6 +40,7 @@ pub const IrInstruction = union(IrOpCode) {
     Store: struct { src: VReg, symbol: []const u8 },
     Add: struct { dest: VReg, src1: VReg, src2: VReg },
     Mult: struct { dest: VReg, src1: VReg, src2: VReg },
+    Shl: struct { dest: VReg, src1: VReg, src2: VReg },
     VolatileStore: struct { base_addr: VReg, pin: u32, offset: u32 },
     CallExternal: struct { src: VReg, target: []const u8 },
     Label: []const u8,
@@ -56,7 +59,6 @@ pub const IrBuilder = struct {
     // key = value, value = reg
     lvn_map: std.AutoHashMap(u32, VReg),
     // key = base_addr + offset, value = pin
-    track_memory_state: std.AutoHashMap(u32, u32),
     next_vreg: VReg,
 
     const Self = @This();
@@ -66,9 +68,17 @@ pub const IrBuilder = struct {
             .allocator = allocator,
             .instructions = ArrayList(IrInstruction).init(allocator),
             .lvn_map = std.AutoHashMap(u32, VReg).init(allocator),
-            .track_memory_state = std.AutoHashMap(VReg, u32).init(allocator),
             .next_vreg = 0,
         };
+    }
+
+    /// generation const values that are already know
+    pub fn constAddress(self: *Self) !VReg {
+        const base_addr_reg = self.allocReg();
+        // BASE ADDRESS ESP32-S3: 0x60004000
+        // 1610629120
+        try self.emit(.{ .Imm = .{ .dest = base_addr_reg, .imm_val = 1610629120 } });
+        return base_addr_reg;
     }
 
     pub fn allocReg(self: *Self) VReg {
