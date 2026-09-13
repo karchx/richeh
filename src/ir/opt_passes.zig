@@ -19,20 +19,6 @@ const LatticeValue = union(FlatLattice) {
     Bottom,
 };
 
-const BlockId = u32;
-
-const BasicBlock = struct {
-    id: BlockId,
-    instructions: ArrayList(IrInstruction),
-    successors: ArrayList(BlockId),
-    predecessors: ArrayList(BlockId),
-};
-
-const CFG = struct {
-    blocks: ArrayList(BasicBlock),
-    entry: BlockId,
-};
-
 pub const OptPasses = struct {
     allocator: mem.Allocator,
     know_const: std.AutoHashMap(VReg, LatticeValue),

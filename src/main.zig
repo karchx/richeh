@@ -9,6 +9,7 @@ const parser = frontend.parser;
 const irbuilder = ir.builder;
 const gen = ir.gen;
 const ir_optpass = ir.optpasses;
+const ir_cfg = ir.cfg;
 
 fn print_error_and_exit(io: std.Io, err: anyerror) noreturn {
     const stderr = std.Io.File.stderr();
@@ -75,6 +76,9 @@ fn run_pipeline(ctx: anytype) void {
     var ir_instrs = generation.generateInstruction() catch |err| print_error_and_exit(io, err);
     opt_pass.constantFolding(&ir_instrs) catch |err| print_error_and_exit(io, err);
     opt_pass.valueNumbering(&ir_instrs) catch |err| print_error_and_exit(io, err);
+
+    var cfg = ir_cfg.CFG.init(global_allocator, &ir_instrs) catch |err| print_error_and_exit(io, err);
+    cfg.basicBlocks() catch |err| print_error_and_exit(io, err);
 
     // Codegen asm
     codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);
