@@ -4,8 +4,6 @@ pin = 5
 
 out(1, pin)
 
--- out(0, pin)
-
 -- wait(5)
 -- 
 -- out(0, pin)

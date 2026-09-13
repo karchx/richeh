@@ -74,6 +74,7 @@ fn run_pipeline(ctx: anytype) void {
     var generation = gen.Gen.init(&builder, stmts) catch |err| print_error_and_exit(io, err);
     var ir_instrs = generation.generateInstruction() catch |err| print_error_and_exit(io, err);
     opt_pass.constantFolding(&ir_instrs) catch |err| print_error_and_exit(io, err);
+    opt_pass.valueNumbering(&ir_instrs) catch |err| print_error_and_exit(io, err);
 
     // Codegen asm
     codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);

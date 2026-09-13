@@ -19,10 +19,25 @@ const LatticeValue = union(FlatLattice) {
     Bottom,
 };
 
+const BlockId = u32;
+
+const BasicBlock = struct {
+    id: BlockId,
+    instructions: ArrayList(IrInstruction),
+    successors: ArrayList(BlockId),
+    predecessors: ArrayList(BlockId),
+};
+
+const CFG = struct {
+    blocks: ArrayList(BasicBlock),
+    entry: BlockId,
+};
+
 pub const OptPasses = struct {
     allocator: mem.Allocator,
     know_const: std.AutoHashMap(VReg, LatticeValue),
     know_symbol: std.StringHashMap(LatticeValue),
+    value_to_vreg: std.AutoHashMap(u32, VReg),
 
     const Self = @This();
 
@@ -31,7 +46,28 @@ pub const OptPasses = struct {
             .allocator = allocator,
             .know_const = std.AutoHashMap(VReg, LatticeValue).init(allocator),
             .know_symbol = std.StringHashMap(LatticeValue).init(allocator),
+            .value_to_vreg = std.AutoHashMap(u32, VReg).init(allocator),
         };
+    }
+
+    pub fn valueNumbering(self: *Self, ir_instructions: *[]IrInstruction) !void {
+        var ir_vn = ArrayList(IrInstruction).init(self.allocator);
+        defer ir_vn.deinit();
+
+        for (ir_instructions.*) |inst| {
+            switch (inst) {
+                .Imm => |val| {
+                    const vn_imm = self.value_to_vreg.get(val.imm_val);
+                    if (vn_imm == null) {
+                        try self.value_to_vreg.put(val.imm_val, val.dest);
+                        try self.append_opt_pass(&ir_vn, inst);
+                    }
+                },
+                else => try self.append_opt_pass(&ir_vn, inst),
+            }
+        }
+
+        ir_instructions.* = try ir_vn.toOwnedSlice();
     }
 
     pub fn constantFolding(self: *Self, ir_instructions: *[]IrInstruction) !void {
