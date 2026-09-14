@@ -41,11 +41,14 @@ pub const CFG = struct {
         return id;
     }
 
-    pub fn basicBlocks(self: *Self) !void {
+    pub fn build(self: *Self) !void {
+        try self.basicBlocks();
+        try self.buildEdges();
+    }
+
+    fn basicBlocks(self: *Self) !void {
         const leaders = try self.computeLeaders();
-        for (leaders, 0..) |ld, idx| {
-            std.debug.print("{d} | LD: {}\n", .{ idx, ld });
-        }
+
         defer self.allocator.free(leaders);
 
         var current: ?BasicBlock = null;
@@ -53,8 +56,6 @@ pub const CFG = struct {
         for (self.ir_instructions.*, 0..) |instr, idx| {
             if (leaders[idx]) {
                 var instr_list = ArrayList(IrInstruction).init(self.allocator);
-                const success_list = ArrayList(BlockId).init(self.allocator);
-                const predecess_list = ArrayList(BlockId).init(self.allocator);
                 if (current) |b| {
                     try self.blocks.append(b);
                 }
@@ -63,8 +64,6 @@ pub const CFG = struct {
 
                 current = self.createBlock(
                     instr_list,
-                    success_list,
-                    predecess_list,
                 );
                 if (idx == 0) {
                     self.entry = current.?.Id;
@@ -76,14 +75,52 @@ pub const CFG = struct {
         if (current) |b| try self.blocks.append(b);
     }
 
-    fn createBlock(self: *Self, instr: ArrayList(IrInstruction), success: ArrayList(BlockId), predecess: ArrayList(BlockId)) BasicBlock {
+    fn buildEdges(self: *Self) !void {
+        var label_map = std.StringHashMap(BlockId).init(self.allocator);
+        defer label_map.deinit();
+
+        for (self.blocks.items) |bb| {
+            for (bb.Instructions.items) |instr| {
+                if (instr == .Label) {
+                    const label_name = instr.Label;
+                    try label_map.put(label_name, bb.Id);
+                }
+            }
+        }
+
+        for (self.blocks.items, 0..) |*bb, idx| {
+            const last_instr = bb.Instructions.items[bb.Instructions.items.len - 1];
+            switch (last_instr) {
+                .Jump => |target| {
+                    if (label_map.get(target)) |blockId| {
+                        try bb.Successors.append(blockId);
+                    }
+                },
+                // TODO: add return, condional(jump, branch)
+                else => {
+                    if (idx + 1 < self.blocks.items.len) {
+                        const blockId = self.blocks.items[idx + 1].Id;
+                        try bb.Successors.append(blockId);
+                    }
+                },
+            }
+        }
+
+        for (self.blocks.items) |*bb| {
+            for (bb.Successors.items) |succ_id| {
+                try self.blocks.items[succ_id].Predecessors.append(bb.Id);
+            }
+        }
+    }
+
+    fn createBlock(self: *Self, instr: ArrayList(IrInstruction)) BasicBlock {
         const id = self.allocNextId();
 
         return BasicBlock{
             .Id = id,
             .Instructions = instr,
-            .Successors = success,
-            .Predecessors = predecess,
+            .Successors = ArrayList(BlockId).init(self.allocator),
+            .Predecessors = ArrayList(BlockId).init(self.allocator),
         };
     }
 
@@ -121,5 +158,24 @@ pub const CFG = struct {
         }
 
         return is_leader;
+    }
+
+    pub fn dump(self: *const Self) void {
+        std.debug.print("CFG (entry = {d})\n", .{self.entry});
+        for (self.blocks.items) |bb| {
+            std.debug.print("BB {d}:\n", .{bb.Id});
+            for (bb.Instructions.items) |instr| {
+                switch (instr) {
+                    .Label => |val| std.debug.print(" .Label = {s}\n", .{val}),
+                    .Jump => |val| std.debug.print("  .Jump = {s}\n", .{val}),
+                    else => std.debug.print("  {any}\n", .{instr}),
+                }
+            }
+            std.debug.print("  succ: ", .{});
+            for (bb.Successors.items) |s| std.debug.print("{d} ", .{s});
+            std.debug.print("\n  pred: ", .{});
+            for (bb.Predecessors.items) |p| std.debug.print("{d} ", .{p});
+            std.debug.print("\n\n", .{});
+        }
     }
 };

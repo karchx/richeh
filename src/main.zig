@@ -78,7 +78,8 @@ fn run_pipeline(ctx: anytype) void {
     opt_pass.valueNumbering(&ir_instrs) catch |err| print_error_and_exit(io, err);
 
     var cfg = ir_cfg.CFG.init(global_allocator, &ir_instrs) catch |err| print_error_and_exit(io, err);
-    cfg.basicBlocks() catch |err| print_error_and_exit(io, err);
+    cfg.build() catch |err| print_error_and_exit(io, err);
+    cfg.dump();
 
     // Codegen asm
     codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);
