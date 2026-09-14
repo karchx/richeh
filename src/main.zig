@@ -79,7 +79,6 @@ fn run_pipeline(ctx: anytype) void {
 
     var cfg = ir_cfg.CFG.init(global_allocator, &ir_instrs) catch |err| print_error_and_exit(io, err);
     cfg.build() catch |err| print_error_and_exit(io, err);
-    cfg.dump();
 
     // Codegen asm
     codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);
@@ -98,5 +97,9 @@ fn run_pipeline(ctx: anytype) void {
             pprint.print_ir_code(instr, &ir_writer.interface) catch |err| print_error_and_exit(io, err);
         }
         ir_writer.interface.flush() catch |err| print_error_and_exit(io, err);
+    }
+
+    if (options.print_cfg) {
+        cfg.dump();
     }
 }

@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const builder = @import("builder.zig");
 const IrInstruction = builder.IrInstruction;
+const VReg = builder.VReg;
 
 fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
@@ -16,12 +17,16 @@ const BasicBlock = struct {
     Predecessors: ArrayList(BlockId),
 };
 
+const InstRef = struct { block: BlockId, index: usize };
+
 pub const CFG = struct {
     allocator: mem.Allocator,
     blocks: ArrayList(BasicBlock),
     entry: BlockId,
     next_id: BlockId,
     ir_instructions: *[]IrInstruction,
+    defs: std.AutoHashMap(VReg, InstRef),
+    work_list_seed: ArrayList(InstRef),
 
     const Self = @This();
 
@@ -32,6 +37,8 @@ pub const CFG = struct {
             .entry = 0,
             .next_id = 0,
             .ir_instructions = ir_instructions,
+            .defs = std.AutoHashMap(VReg, InstRef).init(allocator),
+            .work_list_seed = ArrayList(InstRef).init(allocator),
         };
     }
 
@@ -44,6 +51,8 @@ pub const CFG = struct {
     pub fn build(self: *Self) !void {
         try self.basicBlocks();
         try self.buildEdges();
+        try self.buildDefUse();
+        try self.deadCode();
     }
 
     fn basicBlocks(self: *Self) !void {
@@ -113,6 +122,72 @@ pub const CFG = struct {
         }
     }
 
+    fn buildDefUse(self: *Self) !void {
+        for (self.blocks.items) |bb| {
+            for (bb.Instructions.items, 0..) |instr, idx| {
+                const ref = InstRef{ .block = bb.Id, .index = idx };
+
+                switch (instr) {
+                    .Imm => |v| {
+                        try self.defs.put(v.dest, ref);
+                    },
+                    .Add => |v| {
+                        try self.defs.put(v.dest, ref);
+                    },
+                    .VolatileStore, .Jump, .CallExternal, .LoadLiteral => {
+                        try self.work_list_seed.append(ref);
+                    },
+                    .Label, .Store => {},
+                    else => {},
+                }
+            }
+        }
+    }
+
+    fn deadCode(self: *Self) !void {
+        var live = std.AutoHashMap(InstRef, void).init(self.allocator);
+        defer live.deinit();
+
+        var work = ArrayList(InstRef).init(self.allocator);
+        defer work.deinit();
+
+        for (self.work_list_seed.items) |ref| {
+            try live.put(ref, {});
+            try work.append(ref);
+        }
+
+        while (work.pop()) |ref| {
+            const instr = self.blocks.items[ref.block].Instructions.items[ref.index];
+
+            const used_vregs = try self.getUsedVRegs(instr);
+            for (used_vregs) |v| {
+                if (self.defs.get(v)) |def_ref| {
+                    const gop = try live.getOrPut(def_ref);
+                    if (!gop.found_existing) {
+                        try work.append(def_ref);
+                    }
+                }
+            }
+        }
+
+        try self.sweep(live);
+    }
+
+    fn sweep(self: *Self, live: std.AutoHashMap(InstRef, void)) !void {
+        var new_ir = ArrayList(IrInstruction).init(self.allocator);
+
+        for (self.blocks.items) |bb| {
+            for (bb.Instructions.items, 0..) |instr, idx| {
+                const ref = InstRef{ .block = bb.Id, .index = idx };
+                if (live.contains(ref) or instr == .Label) {
+                    try new_ir.append(instr);
+                }
+            }
+        }
+
+        self.ir_instructions.* = try new_ir.toOwnedSlice();
+    }
+
     fn createBlock(self: *Self, instr: ArrayList(IrInstruction)) BasicBlock {
         const id = self.allocNextId();
 
@@ -158,6 +233,31 @@ pub const CFG = struct {
         }
 
         return is_leader;
+    }
+
+    fn getUsedVRegs(self: *Self, instr: IrInstruction) ![]VReg {
+        var used_vregs = ArrayList(VReg).init(self.allocator);
+        errdefer used_vregs.deinit();
+        switch (instr) {
+            .Add => |v| {
+                try used_vregs.append(v.src1);
+                try used_vregs.append(v.src2);
+            },
+            .Mult => |v| {
+                try used_vregs.append(v.src1);
+                try used_vregs.append(v.src2);
+            },
+            .VolatileStore => |v| {
+                try used_vregs.append(v.pin);
+            },
+            .CallExternal => |v| {
+                try used_vregs.append(v.src);
+            },
+            else => {},
+        }
+
+        const used_vregs_list = try used_vregs.toOwnedSlice();
+        return used_vregs_list;
     }
 
     pub fn dump(self: *const Self) void {

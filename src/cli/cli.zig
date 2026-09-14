@@ -20,6 +20,8 @@ pub const CliOptions = struct {
     print_ast: bool,
     /// Flag to control IR code printing.
     print_ir: bool,
+    /// Flag to control CFG dump printing.
+    print_cfg: bool,
 };
 
 pub fn free_options(allocator: mem.Allocator, options: CliOptions) void {
@@ -38,6 +40,7 @@ fn print_usage(io: std.Io) void {
         \\ -in  <file> Input file to compile
         \\ -ast        Print Ast nodes (optional, disabled by default)
         \\ -ir         Print IR struct code (optional, disabled bye default)
+        \\ -cfg        Print CFG dump (optional, disabled bye default)
     ) catch {};
 }
 
@@ -51,6 +54,7 @@ pub fn parse_args(allocator: mem.Allocator, io: std.Io, argv: []const []const u8
     var input_file: ?[]const u8 = null;
     var print_ast = false;
     var print_ir = false;
+    var print_cfg = false;
     var program_args = ArrayList([]const u8).init(allocator);
 
     errdefer {
@@ -82,6 +86,8 @@ pub fn parse_args(allocator: mem.Allocator, io: std.Io, argv: []const []const u8
             print_ast = true;
         } else if (std.mem.eql(u8, arg, "-ir")) {
             print_ir = true;
+        } else if (std.mem.eql(u8, arg, "-cfg")) {
+            print_cfg = true;
         }
     }
 
@@ -97,5 +103,6 @@ pub fn parse_args(allocator: mem.Allocator, io: std.Io, argv: []const []const u8
         .input_file = ifilepath,
         .print_ast = print_ast,
         .print_ir = print_ir,
+        .print_cfg = print_cfg,
     };
 }
