@@ -15,6 +15,8 @@ const BasicBlock = struct {
     Instructions: ArrayList(IrInstruction),
     Successors: ArrayList(BlockId),
     Predecessors: ArrayList(BlockId),
+    Def: std.DynamicBitSet,
+    Use: std.DynamicBitSet,
 };
 
 const InstRef = struct { block: BlockId, index: usize };
@@ -27,6 +29,8 @@ pub const CFG = struct {
     ir_instructions: *[]IrInstruction,
     defs: std.AutoHashMap(VReg, InstRef),
     work_list_seed: ArrayList(InstRef),
+    live_in: std.AutoHashMap(BlockId, std.DynamicBitSet),
+    live_out: std.AutoHashMap(BlockId, std.DynamicBitSet),
 
     const Self = @This();
 
@@ -39,6 +43,8 @@ pub const CFG = struct {
             .ir_instructions = ir_instructions,
             .defs = std.AutoHashMap(VReg, InstRef).init(allocator),
             .work_list_seed = ArrayList(InstRef).init(allocator),
+            .live_in = std.AutoHashMap(BlockId, std.DynamicBitSet).init(allocator),
+            .live_out = std.AutoHashMap(BlockId, std.DynamicBitSet).init(allocator),
         };
     }
 
@@ -53,6 +59,76 @@ pub const CFG = struct {
         try self.buildEdges();
         try self.buildDefUse();
         try self.deadCode();
+    }
+
+    pub fn computeLiveness(self: *Self) !void {
+        try self.computeLocalLiveness();
+
+        for (self.blocks.items) |bb| {
+            try self.live_in.put(bb.Id, try std.DynamicBitSet.initEmpty(self.allocator, 128));
+            try self.live_out.put(bb.Id, try std.DynamicBitSet.initEmpty(self.allocator, 128));
+        }
+
+        var changed = true;
+
+        while (changed) {
+            changed = false;
+
+            var i = self.blocks.items.len;
+            while (i > 0) {
+                i -= 1;
+                const bb = &self.blocks.items[i];
+
+                var new_out = try std.DynamicBitSet.initEmpty(self.allocator, 128);
+                for (bb.Successors.items) |succ_id| {
+                    if (self.live_in.get(succ_id)) |succ_in| {
+                        new_out.setUnion(succ_in);
+                    }
+                }
+
+                var new_in = try new_out.clone(self.allocator);
+
+                var def_it = bb.Def.iterator(.{});
+
+                while (def_it.next()) |bit| {
+                    new_in.unset(bit);
+                }
+                new_in.setUnion(bb.Use);
+
+                const old_in = self.live_in.getPtr(bb.Id).?;
+                const old_out = self.live_out.getPtr(bb.Id).?;
+
+                if (!new_in.eql(old_in.*) or !new_out.eql(old_out.*)) {
+                    changed = true;
+                    old_in.* = new_in;
+                    old_out.* = new_out;
+                } else {
+                    new_in.deinit();
+                    new_out.deinit();
+                }
+            }
+        }
+    }
+
+    fn computeLocalLiveness(self: *Self) !void {
+        for (self.blocks.items) |*bb| {
+            var i: usize = bb.Instructions.items.len;
+
+            while (i > 0) {
+                i -= 1;
+                const instr = bb.Instructions.items[i];
+
+                if (self.getDestVReg(instr)) |d| {
+                    bb.Def.set(d);
+                    bb.Use.unset(d);
+                }
+
+                const used_vregs = try self.getUsedVRegs(instr);
+                for (used_vregs) |u| {
+                    bb.Use.set(u);
+                }
+            }
+        }
     }
 
     fn basicBlocks(self: *Self) !void {
@@ -71,7 +147,7 @@ pub const CFG = struct {
 
                 try instr_list.append(instr);
 
-                current = self.createBlock(
+                current = try self.createBlock(
                     instr_list,
                 );
                 if (idx == 0) {
@@ -188,7 +264,7 @@ pub const CFG = struct {
         self.ir_instructions.* = try new_ir.toOwnedSlice();
     }
 
-    fn createBlock(self: *Self, instr: ArrayList(IrInstruction)) BasicBlock {
+    fn createBlock(self: *Self, instr: ArrayList(IrInstruction)) !BasicBlock {
         const id = self.allocNextId();
 
         return BasicBlock{
@@ -196,6 +272,8 @@ pub const CFG = struct {
             .Instructions = instr,
             .Successors = ArrayList(BlockId).init(self.allocator),
             .Predecessors = ArrayList(BlockId).init(self.allocator),
+            .Def = try std.DynamicBitSet.initEmpty(self.allocator, 128),
+            .Use = try std.DynamicBitSet.initEmpty(self.allocator, 128),
         };
     }
 
@@ -261,6 +339,20 @@ pub const CFG = struct {
         return used_vregs_list;
     }
 
+    /// Extract virtual register for dest in instruction
+    fn getDestVReg(_: *Self, instr: IrInstruction) ?VReg {
+        return switch (instr) {
+            .Imm => |v| v.dest,
+            .LoadLiteral => |v| v.dest,
+            .Load => |v| v.dest,
+            .Add => |v| v.dest,
+            .Mult => |v| v.dest,
+            .Shl => |v| v.dest,
+
+            .Store, .VolatileStore, .CallExternal, .Jump, .Label => null,
+        };
+    }
+
     pub fn dump(self: *const Self) void {
         std.debug.print("CFG (entry = {d})\n", .{self.entry});
         for (self.blocks.items) |bb| {
@@ -277,6 +369,22 @@ pub const CFG = struct {
             std.debug.print("\n  pred: ", .{});
             for (bb.Predecessors.items) |p| std.debug.print("{d} ", .{p});
             std.debug.print("\n\n", .{});
+        }
+
+        var ins = self.live_in.iterator();
+        var outs = self.live_out.iterator();
+        while (ins.next()) |in| {
+            var bits = in.value_ptr.*.iterator(.{});
+            while (bits.next()) |bit_in| {
+                std.debug.print("Live in key: {d} Live in value: {}\n", .{ in.key_ptr.*, bit_in });
+            }
+        }
+
+        while (outs.next()) |out| {
+            var bits = out.value_ptr.*.iterator(.{});
+            while (bits.next()) |bit_in| {
+                std.debug.print("Live out key: {d} Live out value: {}\n", .{ out.key_ptr.*, bit_in });
+            }
         }
     }
 };
