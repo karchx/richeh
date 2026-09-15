@@ -15,11 +15,16 @@ pub const Gen = struct {
     builder_proc: *builder.IrBuilder,
     statements: []const *ast.Node,
     gpio_base: VReg = 0,
+    env: std.StringHashMap(VReg),
 
     const Self = @This();
 
     pub fn init(builder_proc: *builder.IrBuilder, stmts: []const *ast.Node) IrError!Self {
-        return Self{ .builder_proc = builder_proc, .statements = stmts };
+        return Self{
+            .builder_proc = builder_proc,
+            .statements = stmts,
+            .env = std.StringHashMap(VReg).init(builder_proc.allocator),
+        };
     }
 
     pub fn generateInstruction(self: *Self) IrError![]IrInstruction {
@@ -93,29 +98,40 @@ pub const Gen = struct {
                 try self.builder_proc.emit(instruction);
                 return reg;
             },
+            .assignment_statement => |assign| {
+                const val_reg = (try self.visit(assign.val)).?;
+                try self.builder_proc.emit(.{
+                    .Store = .{ .src = val_reg, .symbol = assign.target },
+                });
+                self.env.put(assign.target, val_reg) catch return IrError.MemoryAllocationFailed;
+
+                return null;
+            },
             .identifier => |id| {
+                if (self.env.get(id.sval.items)) |reg| {
+                    return reg;
+                }
                 const reg = self.builder_proc.allocReg();
                 try self.builder_proc.emit(.{
                     .Load = .{ .dest = reg, .symbol = id.sval.items },
                 });
                 return reg;
             },
-            .assignment_statement => |assign| {
-                const val_reg = (try self.visit(assign.val)).?;
-                try self.builder_proc.emit(.{
-                    .Store = .{ .src = val_reg, .symbol = assign.target },
-                });
-
-                return null;
-            },
             .out_statement => |out| {
                 const pin_reg = (try self.visit(out.addr)).?;
 
-                const one = self.builder_proc.allocReg();
-                try self.builder_proc.emit(.{ .Imm = .{ .dest = one, .imm_val = 1 } });
+                const mask_key = std.fmt.allocPrint(self.builder_proc.allocator, "mask_{d}", .{pin_reg}) catch return IrError.MemoryAllocationFailed;
+                const mask_reg = if (self.env.get(mask_key)) |existing|
+                    existing
+                else blk: {
+                    const one = self.builder_proc.allocReg();
+                    try self.builder_proc.emit(.{ .Imm = .{ .dest = one, .imm_val = 1 } });
 
-                const mask_reg = self.builder_proc.allocReg();
-                try self.builder_proc.emit(.{ .Shl = .{ .dest = mask_reg, .src1 = one, .src2 = pin_reg } });
+                    const new_mask = self.builder_proc.allocReg();
+                    try self.builder_proc.emit(.{ .Shl = .{ .dest = new_mask, .src1 = one, .src2 = pin_reg } });
+                    self.env.put(mask_key, new_mask) catch return IrError.MemoryAllocationFailed;
+                    break :blk new_mask;
+                };
 
                 const base_addr_reg = self.gpio_base;
 
@@ -143,11 +159,19 @@ pub const Gen = struct {
                 const FREQ_CPU_DEFAULT: u32 = 100; // FREQ IN Hz
                 const seconds: u32 = @intCast(wait.seconds.variant.number.llnum);
                 const ticks = seconds * FREQ_CPU_DEFAULT;
-                const reg = self.builder_proc.allocReg();
+                const wait_key = std.fmt.allocPrint(self.builder_proc.allocator, "delay_{d}", .{ticks}) catch return IrError.MemoryAllocationFailed;
 
-                try self.builder_proc.emit(.{
-                    .LoadLiteral = .{ .dest = reg, .literal_val = ticks },
-                });
+                const reg = if (self.env.get(wait_key)) |existing|
+                    existing
+                else blk: {
+                    const new_reg = self.builder_proc.allocReg();
+
+                    try self.builder_proc.emit(.{
+                        .LoadLiteral = .{ .dest = new_reg, .literal_val = ticks },
+                    });
+                    self.env.put(wait_key, new_reg) catch return IrError.MemoryAllocationFailed;
+                    break :blk new_reg;
+                };
 
                 try self.builder_proc.emit(.{
                     .CallExternal = .{ .src = reg, .target = "vTaskDelay" },

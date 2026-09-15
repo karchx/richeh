@@ -249,6 +249,7 @@ pub const CFG = struct {
             },
             .VolatileStore => |v| {
                 try used_vregs.append(v.pin);
+                try used_vregs.append(v.base_addr);
             },
             .CallExternal => |v| {
                 try used_vregs.append(v.src);
