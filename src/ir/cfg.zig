@@ -1,12 +1,32 @@
 const std = @import("std");
 const mem = std.mem;
 const builder = @import("builder.zig");
+const InterferenceGraph = @import("interference_graph.zig").InterferenceGraph;
 const IrInstruction = builder.IrInstruction;
 const VReg = builder.VReg;
 
 fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
 }
+
+const PhysReg = enum(u4) {
+    a0,
+    a1,
+    a2,
+    a3,
+    a4,
+    a5,
+    a6,
+    a7,
+    a8,
+    a9,
+    a10,
+    a11,
+    a12,
+    a13,
+    a14,
+    a15,
+};
 
 const BlockId = u32;
 
@@ -31,8 +51,15 @@ pub const CFG = struct {
     work_list_seed: ArrayList(InstRef),
     live_in: std.AutoHashMap(BlockId, std.DynamicBitSet),
     live_out: std.AutoHashMap(BlockId, std.DynamicBitSet),
+    precolored: std.AutoHashMap(VReg, u8),
+    graph: InterferenceGraph,
 
     const Self = @This();
+    const phys_regs = [_]PhysReg{
+        .a2, .a3, .a4, .a5, .a6, .a7, // args + return
+        .a8, .a9, .a10, .a11, // caller-saved extra
+        .a12, .a13, .a14, .a15, // callee-saved
+    };
 
     pub fn init(allocator: mem.Allocator, ir_instructions: *[]IrInstruction) !Self {
         return Self{
@@ -45,6 +72,8 @@ pub const CFG = struct {
             .work_list_seed = ArrayList(InstRef).init(allocator),
             .live_in = std.AutoHashMap(BlockId, std.DynamicBitSet).init(allocator),
             .live_out = std.AutoHashMap(BlockId, std.DynamicBitSet).init(allocator),
+            .precolored = std.AutoHashMap(VReg, u8).init(allocator),
+            .graph = InterferenceGraph.init(allocator),
         };
     }
 
@@ -105,6 +134,41 @@ pub const CFG = struct {
                 } else {
                     new_in.deinit();
                     new_out.deinit();
+                }
+            }
+        }
+    }
+
+    pub fn computePrecolored(self: *Self) !void {
+        const ARG0_COLOR: u8 = 4;
+        for (self.blocks.items) |bb| {
+            for (bb.Instructions.items) |instr| {
+                switch (instr) {
+                    .CallExternal => |val| {
+                        try self.precolored.put(val.src, ARG0_COLOR);
+                    },
+                    else => {},
+                }
+            }
+        }
+    }
+
+    pub fn buildInterference(self: *Self) !void {
+        for (self.blocks.items) |bb| {
+            var live = try self.live_out.get(bb.Id).?.clone(self.allocator);
+            defer live.deinit();
+
+            var i = bb.Instructions.items.len;
+            while (i >= 0) {
+                i -= 1;
+                const instr = bb.Instructions.items[i];
+
+                if (self.getDestVReg(instr)) |d| {
+                    var it = live.iterator(.{});
+                    while (it.next()) |bit| {
+                        try self.graph.addEdge(d, @intCast(bit));
+                    }
+                    live.unset(d);
                 }
             }
         }
@@ -371,20 +435,11 @@ pub const CFG = struct {
             std.debug.print("\n\n", .{});
         }
 
-        var ins = self.live_in.iterator();
-        var outs = self.live_out.iterator();
-        while (ins.next()) |in| {
-            var bits = in.value_ptr.*.iterator(.{});
-            while (bits.next()) |bit_in| {
-                std.debug.print("Live in key: {d} Live in value: {}\n", .{ in.key_ptr.*, bit_in });
-            }
-        }
+        var it = self.precolored.iterator();
 
-        while (outs.next()) |out| {
-            var bits = out.value_ptr.*.iterator(.{});
-            while (bits.next()) |bit_in| {
-                std.debug.print("Live out key: {d} Live out value: {}\n", .{ out.key_ptr.*, bit_in });
-            }
+        while (it.next()) |val| {
+            std.debug.print("Precolored: \n", .{});
+            std.debug.print(" v{d} -> r{d}\n", .{ val.key_ptr.*, val.value_ptr.* });
         }
     }
 };
