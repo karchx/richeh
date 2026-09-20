@@ -78,9 +78,12 @@ fn run_pipeline(ctx: anytype) void {
     opt_pass.valueNumbering(&ir_instrs) catch |err| print_error_and_exit(io, err);
 
     var cfg = ir_cfg.CFG.init(global_allocator, &ir_instrs) catch |err| print_error_and_exit(io, err);
+    defer cfg.deinit();
+
     cfg.build() catch |err| print_error_and_exit(io, err);
     cfg.computeLiveness() catch |err| print_error_and_exit(io, err);
     cfg.computePrecolored() catch |err| print_error_and_exit(io, err);
+    cfg.buildInterference() catch |err| print_error_and_exit(io, err);
 
     // Codegen asm
     codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);

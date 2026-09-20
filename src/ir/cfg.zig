@@ -77,6 +77,10 @@ pub const CFG = struct {
         };
     }
 
+    pub fn deinit(self: *Self) void {
+        self.graph.deinit();
+    }
+
     fn allocNextId(self: *Self) BlockId {
         const id = self.next_id;
         self.next_id += 1;
@@ -154,21 +158,30 @@ pub const CFG = struct {
     }
 
     pub fn buildInterference(self: *Self) !void {
+        for (0..self.next_id) |v| {
+            try self.graph.ensureNode(@intCast(v));
+        }
+
         for (self.blocks.items) |bb| {
             var live = try self.live_out.get(bb.Id).?.clone(self.allocator);
             defer live.deinit();
 
             var i = bb.Instructions.items.len;
-            while (i >= 0) {
+            while (i > 0) {
                 i -= 1;
                 const instr = bb.Instructions.items[i];
 
                 if (self.getDestVReg(instr)) |d| {
-                    var it = live.iterator(.{});
-                    while (it.next()) |bit| {
-                        try self.graph.addEdge(d, @intCast(bit));
+                    var live_it = live.iterator(.{});
+                    while (live_it.next()) |v| {
+                        if (v != d) try self.graph.addEdge(d, @intCast(v));
                     }
                     live.unset(d);
+                }
+
+                const used_vregs = try self.getUsedVRegs(instr);
+                for (used_vregs) |u| {
+                    live.set(u);
                 }
             }
         }
@@ -441,5 +454,8 @@ pub const CFG = struct {
             std.debug.print("Precolored: \n", .{});
             std.debug.print(" v{d} -> r{d}\n", .{ val.key_ptr.*, val.value_ptr.* });
         }
+
+        std.debug.print("\n", .{});
+        self.graph.dump();
     }
 };
