@@ -3,9 +3,10 @@ const mem = std.mem;
 const builder = @import("builder.zig");
 const IrInstruction = builder.IrInstruction;
 const VReg = builder.VReg;
+const AdjacencyMap = std.AutoHashMap(VReg, std.AutoHashMap(VReg, void));
 
 pub const InterferenceGraph = struct {
-    adj: std.AutoHashMap(VReg, std.AutoHashMap(VReg, void)),
+    adj: AdjacencyMap,
     degree: std.AutoHashMap(VReg, u32),
     allocator: mem.Allocator,
 
@@ -14,7 +15,7 @@ pub const InterferenceGraph = struct {
     pub fn init(allocator: mem.Allocator) Self {
         return Self{
             .allocator = allocator,
-            .adj = std.AutoHashMap(VReg, std.AutoHashMap(VReg, void)).init(allocator),
+            .adj = AdjacencyMap.init(allocator),
             .degree = std.AutoHashMap(VReg, u32).init(allocator),
         };
     }
@@ -65,8 +66,8 @@ pub const InterferenceGraph = struct {
         return self.degree.get(v) orelse 0;
     }
 
-    pub fn nodes(self: *Self) std.AutoHashMap(VReg, std.AutoHashMap(VReg, void)) {
-        return self.adj.iterator();
+    pub fn nodes(self: *Self) AdjacencyMap.KeyIterator {
+        return self.adj.keyIterator();
     }
 
     pub fn dump(self: *const Self) void {

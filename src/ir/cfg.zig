@@ -185,6 +185,65 @@ pub const CFG = struct {
                 }
             }
         }
+
+        _ = try self.simplify(phys_regs.len);
+    }
+
+    fn filterDegreeK(self: *Self, K: u32) !ArrayList(VReg) {
+        var kList = ArrayList(VReg).init(self.allocator);
+
+        var nodes_it = self.graph.nodes();
+
+        while (nodes_it.next()) |current| {
+            if (self.graph.getDegree(current.*) < K) {
+                try kList.append(current.*);
+            }
+        }
+
+        return kList;
+    }
+
+    fn nodesActives(self: *Self) !std.AutoHashMap(VReg, void) {
+        var actives = std.AutoHashMap(VReg, void).init(self.allocator);
+        var nodes = self.graph.nodes();
+        while (nodes.next()) |v| {
+            try actives.put(v.*, {});
+        }
+
+        return actives;
+    }
+
+    fn simplify(self: *Self, K: u32) !ArrayList(VReg) {
+        var current_degree = try self.graph.degree.clone();
+        defer current_degree.deinit();
+
+        var actives = try self.nodesActives();
+        defer actives.deinit();
+
+        var stack = ArrayList(VReg).init(self.allocator);
+        var work_list = try self.filterDegreeK(K);
+        defer work_list.deinit();
+
+        while (work_list.pop()) |v| {
+            if (!actives.contains(v)) continue;
+
+            try stack.append(v);
+            _ = actives.remove(v);
+
+            const neighbors = self.graph.adj.getPtr(v) orelse continue;
+            var it = neighbors.iterator();
+            while (it.next()) |entry| {
+                const n = entry.key_ptr.*;
+                if (!actives.contains(n)) continue;
+
+                const deg = current_degree.getPtr(n).?;
+                deg.* -= 1;
+                if (deg.* == K - 1) {
+                    try work_list.append(n);
+                }
+            }
+        }
+        return stack;
     }
 
     fn computeLocalLiveness(self: *Self) !void {
