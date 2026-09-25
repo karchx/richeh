@@ -6,6 +6,25 @@ fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
 }
 
+const PhysReg = enum(u4) {
+    a0,
+    a1,
+    a2,
+    a3,
+    a4,
+    a5,
+    a6,
+    a7,
+    a8,
+    a9,
+    a10,
+    a11,
+    a12,
+    a13,
+    a14,
+    a15,
+};
+
 pub const Asm = struct {
     allocator: mem.Allocator,
     app_buffer: ArrayList(u8), // app section and config instruction
@@ -18,6 +37,11 @@ pub const Asm = struct {
     v2p_map: [256]u8 = [_]u8{0} ** 256,
 
     const Self = @This();
+    const phys_regs = [_]PhysReg{
+        .a2, .a3, .a4, .a5, .a6, .a7, // args + return
+        .a8, .a9, .a10, .a11, // caller-saved extra
+        .a12, .a13, .a14, .a15, // callee-saved
+    };
 
     fn globalIo() std.Io {
         return std.Io.Threaded.global_single_threaded.io();

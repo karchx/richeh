@@ -9,25 +9,6 @@ fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
 }
 
-const PhysReg = enum(u4) {
-    a0,
-    a1,
-    a2,
-    a3,
-    a4,
-    a5,
-    a6,
-    a7,
-    a8,
-    a9,
-    a10,
-    a11,
-    a12,
-    a13,
-    a14,
-    a15,
-};
-
 const BlockId = u32;
 
 const BasicBlock = struct {
@@ -52,14 +33,10 @@ pub const CFG = struct {
     live_in: std.AutoHashMap(BlockId, std.DynamicBitSet),
     live_out: std.AutoHashMap(BlockId, std.DynamicBitSet),
     precolored: std.AutoHashMap(VReg, u8),
+    assignment: std.AutoHashMap(VReg, i32),
     graph: InterferenceGraph,
 
     const Self = @This();
-    const phys_regs = [_]PhysReg{
-        .a2, .a3, .a4, .a5, .a6, .a7, // args + return
-        .a8, .a9, .a10, .a11, // caller-saved extra
-        .a12, .a13, .a14, .a15, // callee-saved
-    };
 
     pub fn init(allocator: mem.Allocator, ir_instructions: *[]IrInstruction) !Self {
         return Self{
@@ -73,6 +50,7 @@ pub const CFG = struct {
             .live_in = std.AutoHashMap(BlockId, std.DynamicBitSet).init(allocator),
             .live_out = std.AutoHashMap(BlockId, std.DynamicBitSet).init(allocator),
             .precolored = std.AutoHashMap(VReg, u8).init(allocator),
+            .assignment = std.AutoHashMap(VReg, i32).init(allocator),
             .graph = InterferenceGraph.init(allocator),
         };
     }
@@ -186,7 +164,9 @@ pub const CFG = struct {
             }
         }
 
-        _ = try self.simplify(phys_regs.len);
+        var simply_stack = try self.simplify(14);
+        defer simply_stack.deinit();
+        try self.select(&simply_stack, 14);
     }
 
     fn filterDegreeK(self: *Self, K: u32) !ArrayList(VReg) {
@@ -244,6 +224,57 @@ pub const CFG = struct {
             }
         }
         return stack;
+    }
+
+    fn select(self: *Self, stack: *ArrayList(VReg), K: u32) !void {
+        self.assignment.clearRetainingCapacity();
+        var used = try std.DynamicBitSet.initEmpty(self.allocator, K);
+        defer used.deinit();
+
+        while (stack.pop()) |v| {
+            used.setRangeValue(.{ .start = 0, .end = K }, false);
+
+            if (self.precolored.get(v)) |forced| {
+                const neighbors = self.graph.adj.get(v) orelse {
+                    try self.assignment.put(v, forced);
+                    continue;
+                };
+
+                var conflict = false;
+                var it = neighbors.keyIterator();
+                while (it.next()) |n| {
+                    if (self.assignment.get(n.*)) |c| {
+                        if (c == forced) {
+                            conflict = true;
+                            break;
+                        }
+                    }
+                }
+                if (conflict) {
+                    try self.assignment.put(v, -1);
+                } else {
+                    try self.assignment.put(v, forced);
+                }
+                continue;
+            }
+
+            const neighbors = self.graph.adj.get(v) orelse continue;
+            var it_n = neighbors.keyIterator();
+            while (it_n.next()) |n| {
+                if (self.assignment.get(n.*)) |c| {
+                    if (c >= 0) used.set(@intCast(c));
+                }
+            }
+
+            var assigned: i32 = -1;
+            for (0..K) |c| {
+                if (!used.isSet(c)) {
+                    assigned = @intCast(c);
+                    break;
+                }
+            }
+            try self.assignment.put(v, assigned);
+        }
     }
 
     fn computeLocalLiveness(self: *Self) !void {
@@ -510,8 +541,11 @@ pub const CFG = struct {
         var it = self.precolored.iterator();
 
         while (it.next()) |val| {
-            std.debug.print("Precolored: \n", .{});
-            std.debug.print(" v{d} -> r{d}\n", .{ val.key_ptr.*, val.value_ptr.* });
+            std.debug.print("Precolored v{d} -> r{d}\n", .{ val.key_ptr.*, val.value_ptr.* });
+        }
+        var it_col = self.assignment.iterator();
+        while (it_col.next()) |val| {
+            std.debug.print("Colored: v{d} -> r{d}\n", .{ val.key_ptr.*, val.value_ptr.* });
         }
 
         std.debug.print("\n", .{});
