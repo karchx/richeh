@@ -124,9 +124,10 @@ pub const Asm = struct {
                 },
 
                 .CallExternal => |ce| {
-                    const arg = assignment.get(ce.src).?;
-                    if (arg != 6) {
-                        try writer.print("  mov a6, a{}\n\n", .{arg});
+                    const idx = assignment.get(ce.src).?;
+                    const arg = phys_regs[@intCast(idx)];
+                    if (arg != .a6) {
+                        try writer.print("  mov a6, {s}\n\n", .{@tagName(arg)});
                     }
                     try writer.print("  call4 {s}\n\n", .{ce.target});
                 },

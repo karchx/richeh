@@ -11,19 +11,14 @@ app_main:
   movi a3, 0x60004000
   movi a2, 0x20
   s32i a2, a3, 0x24
-  s32i a2, a3, 0x24
 
 .main_loop:
   s32i a2, a3, 0x8
   l32r a6, DELAY_TICKS_a6
 
-  mov a6, a4
-
   call4 vTaskDelay
 
   s32i a2, a3, 0xc
-  mov a6, a4
-
   call4 vTaskDelay
 
   j .main_loop

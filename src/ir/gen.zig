@@ -137,9 +137,14 @@ pub const Gen = struct {
 
                 // SET OUTPUT PIN
                 // 36 = 0x24
-                try self.builder_proc.emit(.{
-                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = 36 },
-                });
+                const offset: u32 = 36;
+                const emit_key = std.fmt.allocPrint(self.builder_proc.allocator, "emit_{d}_{d}", .{ offset, pin_reg }) catch return IrError.MemoryAllocationFailed;
+                if (!self.env.contains(emit_key)) {
+                    try self.builder_proc.emit(.{
+                        .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = offset },
+                    });
+                    self.env.put(emit_key, offset) catch return IrError.MemoryAllocationFailed;
+                }
 
                 // offset pulse for HIGH or LOW
                 // HIGH = 8 = 0x08
