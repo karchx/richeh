@@ -1,6 +1,8 @@
 const std = @import("std");
 const mem = std.mem;
-const IrInstruction = @import("ir").builder.IrInstruction;
+const ir = @import("ir");
+const IrInstruction = ir.builder.IrInstruction;
+const VReg = ir.builder.VReg;
 
 fn ArrayList(comptime T: type) type {
     return std.array_list.Managed(T);
@@ -30,11 +32,9 @@ pub const Asm = struct {
     app_buffer: ArrayList(u8), // app section and config instruction
     lit_buffer: ArrayList(u8),
     text_buffer: ArrayList(u8),
-    reg_counter: u8 = 2, // init a2
     literal_counter: usize = 0,
     ofile: ?std.Io.File = null,
     io: std.Io,
-    v2p_map: [256]u8 = [_]u8{0} ** 256,
 
     const Self = @This();
     const phys_regs = [_]PhysReg{
@@ -69,20 +69,11 @@ pub const Asm = struct {
         self.app_buffer.deinit();
     }
 
-    fn getNextReg(self: *Self) u8 {
-        const reg = self.reg_counter;
-        self.reg_counter += 1;
-        if (self.reg_counter > 15) {
-            @panic("POC limit");
-        }
-        return reg;
-    }
-
     fn printIndent(writer: *ArrayList(u8), code: []const u8) !void {
         try writer.print("  {s}", .{code});
     }
 
-    pub fn generate(self: *Self, instrs: []IrInstruction) !void {
+    pub fn generate(self: *Self, instrs: []IrInstruction, assignment: *const std.AutoHashMap(VReg, i32)) !void {
         var writer = &self.text_buffer;
         var lit_writer = &self.lit_buffer;
         var app_buffer = &self.app_buffer;
@@ -102,36 +93,40 @@ pub const Asm = struct {
                     try writer.print("\n{s}:\n", .{label});
                 },
                 .Imm => |imm| {
-                    const physical_reg = self.getNextReg();
-                    self.v2p_map[imm.dest] = physical_reg;
+                    const r_idx = assignment.get(imm.dest).?;
+                    const r = phys_regs[@intCast(r_idx)];
                     // imm_val is 32 in decimal assign GPIO5 TODO: create map for values GPIO in decimal or hex
                     if (imm.imm_val == 32 or imm.imm_val == 1610629120) {
-                        try app_buffer.print("  movi a{}, 0x{x}\n", .{ physical_reg, imm.imm_val });
+                        try app_buffer.print("  movi {s}, 0x{x}\n", .{ @tagName(r), imm.imm_val });
                     } else {
-                        try writer.print("  movi a{}, 0x{x}\n\n", .{ physical_reg, imm.imm_val });
+                        try writer.print("  movi {s}, 0x{x}\n\n", .{ @tagName(r), imm.imm_val });
                     }
                 },
                 .LoadLiteral => |llit| {
-                    const physical_reg = self.getNextReg();
-                    self.v2p_map[llit.dest] = physical_reg;
-                    try lit_writer.print(".literal {s}_{}, {d}\n\n", .{ "DELAY_TICKS", physical_reg, llit.literal_val });
-                    try writer.print("  l32r a{}, {s}_{}\n\n", .{ physical_reg, "DELAY_TICKS", physical_reg });
+                    const r_idx = assignment.get(llit.dest).?;
+                    const r = phys_regs[@intCast(r_idx)];
+
+                    try lit_writer.print(".literal {s}_{s}, {d}\n\n", .{ "DELAY_TICKS", @tagName(r), llit.literal_val });
+                    try writer.print("  l32r {s}, {s}_{s}\n\n", .{ @tagName(r), "DELAY_TICKS", @tagName(r) });
                 },
                 .VolatileStore => |vs| {
-                    const preg_base = self.v2p_map[vs.base_addr];
-                    const preg_pin = self.v2p_map[vs.pin];
+                    const base_idx = assignment.get(vs.base_addr).?;
+                    const pin_idx = assignment.get(vs.pin).?;
+
+                    const base = phys_regs[@intCast(base_idx)];
+                    const pin = phys_regs[@intCast(pin_idx)];
                     // TODO: refactor
                     if (vs.offset == 36) {
-                        try app_buffer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
+                        try app_buffer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), vs.offset });
                     } else {
-                        try writer.print("  s32i a{}, a{}, 0x{x}\n", .{ preg_pin, preg_base, vs.offset });
+                        try writer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), vs.offset });
                     }
                 },
 
                 .CallExternal => |ce| {
-                    const preg = self.v2p_map[ce.src];
-                    if (preg != 6) {
-                        try writer.print("  mov a6, a{}\n\n", .{preg});
+                    const arg = assignment.get(ce.src).?;
+                    if (arg != 6) {
+                        try writer.print("  mov a6, a{}\n\n", .{arg});
                     }
                     try writer.print("  call4 {s}\n\n", .{ce.target});
                 },

@@ -86,7 +86,7 @@ fn run_pipeline(ctx: anytype) void {
     cfg.buildInterference() catch |err| print_error_and_exit(io, err);
 
     // Codegen asm
-    codegen.generate(ir_instrs) catch |err| print_error_and_exit(io, err);
+    codegen.generate(ir_instrs, &cfg.assignment) catch |err| print_error_and_exit(io, err);
 
     if (options.print_ast) {
         var ast_buf: [65536]u8 = undefined;
