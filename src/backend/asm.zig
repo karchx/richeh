@@ -34,6 +34,7 @@ pub const Asm = struct {
     text_buffer: ArrayList(u8),
     literal_counter: usize = 0,
     ofile: ?std.Io.File = null,
+    filename: []const u8,
     io: std.Io,
 
     const Self = @This();
@@ -47,9 +48,18 @@ pub const Asm = struct {
         return std.Io.Threaded.global_single_threaded.io();
     }
 
-    pub fn init(allocator: mem.Allocator) !Self {
+    fn fileName(allocator: mem.Allocator, filepath: []const u8) []const u8 {
+        var it = mem.splitBackwardsScalar(u8, filepath, '/');
+        const basename = it.next().?;
+
+        const filename = std.fmt.allocPrint(allocator, "{s}.S", .{basename}) catch return "out.S";
+        return filename;
+    }
+
+    pub fn init(allocator: mem.Allocator, filepath: []const u8) !Self {
         const io = globalIo();
-        const f = std.Io.Dir.cwd().createFile(io, "o.S", .{}) catch null;
+        const filename = fileName(allocator, filepath);
+        const f = std.Io.Dir.cwd().createFile(io, filename, .{}) catch null;
         errdefer if (f) |ff| ff.close(io);
 
         return Self{
@@ -58,11 +68,13 @@ pub const Asm = struct {
             .lit_buffer = ArrayList(u8).init(allocator),
             .text_buffer = ArrayList(u8).init(allocator),
             .ofile = f,
+            .filename = filename,
             .io = io,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        self.allocator.free(self.filename);
         if (self.ofile) |f| f.close(self.io);
         self.text_buffer.deinit();
         self.lit_buffer.deinit();

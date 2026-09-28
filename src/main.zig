@@ -61,7 +61,7 @@ fn run_pipeline(ctx: anytype) void {
     var pp = parser.Parse.init(&lp);
     var builder = irbuilder.IrBuilder.init(global_allocator);
     var opt_pass = ir_optpass.OptPasses.init(global_allocator) catch |err| print_error_and_exit(io, err);
-    var codegen = backend.genasm.Asm.init(global_allocator) catch |err| print_error_and_exit(io, err);
+    var codegen = backend.genasm.Asm.init(global_allocator, options.input_file) catch |err| print_error_and_exit(io, err);
     defer {
         lp.deinit();
         codegen.deinit();
