@@ -160,6 +160,10 @@ pub const Gen = struct {
 
                 return null;
             },
+            .input_statement => |input| {
+                const value_reg = (try self.visit(input.val)).?;
+                return value_reg;
+            },
             .wait_statement => |wait| {
                 const FREQ_CPU_DEFAULT: u32 = 100; // FREQ IN Hz
                 const seconds: u32 = @intCast(wait.seconds.variant.number.llnum);

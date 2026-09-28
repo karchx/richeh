@@ -27,7 +27,7 @@ pub const TokenType = enum {
     Comma,
     /// A Symbol ';'
     Semicolon,
-    /// A Keyword 'out', 'if', 'else', etc.
+    /// A Keyword 'out', 'input', 'if', 'else', etc.
     Keyword,
     /// End of line
     EOF,
@@ -91,4 +91,8 @@ pub fn is_nl_or_comment_or_newline_separator(token: ?Token) bool {
 
     return token.?.type == .NewLine or
         token.?.type == .Comment;
+}
+
+pub fn is_keyword_token(val: []const u8) bool {
+    return (mem.eql(u8, "out", val) or mem.eql(u8, "wait", val) or mem.eql(u8, "input", val));
 }

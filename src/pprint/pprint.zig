@@ -57,6 +57,9 @@ pub fn print_node(node: ast.Node, writer: *std.Io.Writer, depth: usize) !void {
             try writer.print("TargetAddress: \n", .{});
             try print_node(stmt.addr.*, writer, depth + 2);
         },
+        .input_statement => |stmt| {
+            try print_node(stmt.val.*, writer, depth + 1);
+        },
         .wait_statement => |wstmt| {
             try print_indent(writer, depth + 1);
             try writer.print("Time (sec): \n", .{});

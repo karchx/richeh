@@ -41,6 +41,9 @@ pub const Node = struct {
             val: *Node,
             addr: *Node, // address output, pin_number or hex_number
         },
+        input_statement: struct {
+            val: *Node,
+        },
         /// The waith statement in seconds.
         wait_statement: struct {
             seconds: *Node,

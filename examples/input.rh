@@ -1,0 +1,6 @@
+pin_led = 5
+pin_button = 6
+
+level_button = input(pin_button)
+
+out(level_button, pin_led)

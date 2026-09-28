@@ -119,7 +119,8 @@ pub const Parse = struct {
         };
     }
 
-    fn create_out_wait_node(self: *Self, tok: token.Token) ParseError!ast.Node {
+    /// create side effect, e.g 'out', 'wait', 'input'
+    fn create_side_effect_node(self: *Self, tok: token.Token) ParseError!ast.Node {
         const next_tok = self.token_peek_next() orelse return ParseError.UnexpectedEOF;
 
         // The next token not is LParen
@@ -151,6 +152,13 @@ pub const Parse = struct {
                         .val = node_ptr,
                         .addr = addr_ptr,
                     },
+                },
+            };
+        } else if (mem.eql(u8, "input", keyword)) {
+            return ast.Node{
+                .pos = tok.pos,
+                .variant = .{
+                    .input_statement = .{ .val = node_ptr },
                 },
             };
         } else {
@@ -246,7 +254,7 @@ pub const Parse = struct {
         return try switch (tok.type) {
             .Number => self.create_number_node(tok),
             .Identifier => self.create_identifier_node(tok),
-            .Keyword => self.create_out_wait_node(tok),
+            .Keyword => self.create_side_effect_node(tok),
             .LParen => try self.parse_group_or_matrix(tok),
             else => ParseError.InvalidToken,
         };
