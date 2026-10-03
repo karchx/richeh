@@ -49,10 +49,9 @@ pub const Asm = struct {
     }
 
     fn fileName(allocator: mem.Allocator, filepath: []const u8) []const u8 {
-        var it = mem.splitBackwardsScalar(u8, filepath, '/');
-        const basename = it.next().?;
+        const stemp = std.fs.path.stem(filepath);
 
-        const filename = std.fmt.allocPrint(allocator, "{s}.S", .{basename}) catch return "out.S";
+        const filename = std.fmt.allocPrint(allocator, "{s}.S", .{stemp}) catch return "out.S";
         return filename;
     }
 
