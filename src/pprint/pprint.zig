@@ -102,8 +102,10 @@ pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
         .Mult => |op| try writer.print("v{d} = MULT(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
         .Shl => |op| try writer.print("v{d} = SHL(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
         .Add => |op| try writer.print("v{d} = ADD(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
+        .Sub => |op| try writer.print("v{d} = SUB(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
         .Store => |store| try writer.print("STORE(v{d}, \"{s}\")\n", .{ store.src, store.symbol }),
         .VolatileStore => |vs| try writer.print("VolatileStore(base_addr=v{d}, pin=v{d}, offset={d})\n", .{ vs.base_addr, vs.pin, vs.offset }),
+        .VolatileLoad => |vl| try writer.print("VolatileLoad(base_addr=v{d}, dest=v{d}, pin=v{d}, offset={d})\n", .{ vl.base_addr, vl.dest, vl.pin, vl.offset }),
         .CallExternal => |ce| try writer.print("CallExternal(target=\"{s}\", args=v{})\n", .{ ce.target, ce.src }),
         .Jump => |jump| try writer.print("Jump({s})\n", .{jump}),
     }

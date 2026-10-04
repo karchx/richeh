@@ -515,8 +515,8 @@ pub const CFG = struct {
             .Add => |v| v.dest,
             .Mult => |v| v.dest,
             .Shl => |v| v.dest,
-
-            .Store, .VolatileStore, .CallExternal, .Jump, .Label => null,
+            else => null,
+            // .Store, .VolatileStore, .VolatileLoad, .CallExternal, .Jump, .Label => null,
         };
     }
 

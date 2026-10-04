@@ -19,12 +19,16 @@ pub const IrOpCode = enum {
     Store,
     /// Add two register.
     Add,
+    /// Sub two register.
+    Sub,
     /// Mult two register.
     Mult,
     /// Shl bit operator.
     Shl,
     /// Write register in port special instr in hadware.
     VolatileStore,
+    /// Load register in port hadware.
+    VolatileLoad,
     /// Call external function
     CallExternal,
     /// Label
@@ -39,9 +43,11 @@ pub const IrInstruction = union(IrOpCode) {
     Load: struct { dest: VReg, symbol: []const u8 },
     Store: struct { src: VReg, symbol: []const u8 },
     Add: struct { dest: VReg, src1: VReg, src2: VReg },
+    Sub: struct { dest: VReg, src1: VReg, src2: VReg },
     Mult: struct { dest: VReg, src1: VReg, src2: VReg },
     Shl: struct { dest: VReg, src1: VReg, src2: VReg },
-    VolatileStore: struct { base_addr: VReg, pin: u32, offset: u32 },
+    VolatileStore: struct { base_addr: VReg, pin: VReg, offset: VReg },
+    VolatileLoad: struct { base_addr: VReg, dest: VReg, pin: VReg, offset: u32 },
     CallExternal: struct { src: VReg, target: []const u8 },
     Label: []const u8,
     Jump: []const u8,

@@ -7,10 +7,10 @@ app_main:
   entry a1, 32
   /* CONFIG REGISTERS */
   movi a3, 0x60004000
-  movi a2, 0x20
-  s32i a2, a3, 0x24
+  movi a4, 0x20
+  s32i a4, a3, 0x24
 
 .main_loop:
-  s32i a2, a3, 0x0
+  s32i a4, a3, 0xb
   j .main_loop
   

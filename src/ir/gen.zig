@@ -119,6 +119,8 @@ pub const Gen = struct {
             },
             .out_statement => |out| {
                 const pin_reg = (try self.visit(out.addr)).?;
+                const level_reg = (try self.visit(out.val)).?;
+                const base_addr_reg = self.gpio_base;
 
                 const mask_key = std.fmt.allocPrint(self.builder_proc.allocator, "mask_{d}", .{pin_reg}) catch return IrError.MemoryAllocationFailed;
                 const mask_reg = if (self.env.get(mask_key)) |existing|
@@ -126,14 +128,11 @@ pub const Gen = struct {
                 else blk: {
                     const one = self.builder_proc.allocReg();
                     try self.builder_proc.emit(.{ .Imm = .{ .dest = one, .imm_val = 1 } });
-
                     const new_mask = self.builder_proc.allocReg();
                     try self.builder_proc.emit(.{ .Shl = .{ .dest = new_mask, .src1 = one, .src2 = pin_reg } });
                     self.env.put(mask_key, new_mask) catch return IrError.MemoryAllocationFailed;
                     break :blk new_mask;
                 };
-
-                const base_addr_reg = self.gpio_base;
 
                 // SET OUTPUT PIN
                 // 36 = 0x24
@@ -146,23 +145,54 @@ pub const Gen = struct {
                     self.env.put(emit_key, offset) catch return IrError.MemoryAllocationFailed;
                 }
 
+                const two_reg = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{ .Imm = .{ .dest = two_reg, .imm_val = 2 } });
+
+                const shl_reg = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{ .Shl = .{ .dest = shl_reg, .src1 = level_reg, .src2 = two_reg } });
+
                 // offset pulse for HIGH or LOW
                 // HIGH = 8 = 0x08
                 // LOW = 12 = 0x0C
-                const offset_pulse: VReg = switch (out.val.variant) {
-                    .number => |val| if (val.llnum == 1) 8 else 12,
-                    else => 0,
-                };
+                const twelve_reg = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{ .Imm = .{ .dest = twelve_reg, .imm_val = 12 } });
+
+                const offset_reg = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{ .Sub = .{ .dest = offset_reg, .src1 = twelve_reg, .src2 = shl_reg } });
 
                 try self.builder_proc.emit(.{
-                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = offset_pulse },
+                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = offset_reg },
                 });
 
                 return null;
             },
             .input_statement => |input| {
-                const value_reg = (try self.visit(input.val)).?;
-                return value_reg;
+                const base_addr_reg = self.gpio_base;
+                const pin_reg = (try self.visit(input.val)).?;
+
+                const mask_key = std.fmt.allocPrint(self.builder_proc.allocator, "mask_{d}", .{pin_reg}) catch return IrError.MemoryAllocationFailed;
+                const mask_reg_in = if (self.env.get(mask_key)) |existing|
+                    existing
+                else blk: {
+                    const one = self.builder_proc.allocReg();
+                    try self.builder_proc.emit(.{ .Imm = .{ .dest = one, .imm_val = 1 } });
+
+                    const new_mask = self.builder_proc.allocReg();
+                    try self.builder_proc.emit(.{ .Shl = .{ .dest = new_mask, .src1 = one, .src2 = pin_reg } });
+                    self.env.put(mask_key, new_mask) catch return IrError.MemoryAllocationFailed;
+                    break :blk new_mask;
+                };
+
+                // SET INPUT PIN
+                // 60 = 0X3C
+                const offset: u32 = 60;
+                const reg = self.builder_proc.allocReg();
+
+                try self.builder_proc.emit(.{
+                    .VolatileLoad = .{ .base_addr = base_addr_reg, .dest = reg, .pin = mask_reg_in, .offset = offset },
+                });
+
+                return reg;
             },
             .wait_statement => |wait| {
                 const FREQ_CPU_DEFAULT: u32 = 100; // FREQ IN Hz
