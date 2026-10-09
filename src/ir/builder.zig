@@ -37,16 +37,18 @@ pub const IrOpCode = enum {
     Jump,
 };
 
+const BinOp = struct { dest: VReg, src1: VReg, src2: VReg };
+
 pub const IrInstruction = union(IrOpCode) {
     Imm: struct { dest: VReg, imm_val: u32 },
     LoadLiteral: struct { dest: VReg, literal_val: u32 },
     Load: struct { dest: VReg, symbol: []const u8 },
     Store: struct { src: VReg, symbol: []const u8 },
-    Add: struct { dest: VReg, src1: VReg, src2: VReg },
-    Sub: struct { dest: VReg, src1: VReg, src2: VReg },
-    Mult: struct { dest: VReg, src1: VReg, src2: VReg },
-    Shl: struct { dest: VReg, src1: VReg, src2: VReg },
-    VolatileStore: struct { base_addr: VReg, pin: VReg, offset: VReg },
+    Add: BinOp,
+    Sub: BinOp,
+    Mult: BinOp,
+    Shl: BinOp,
+    VolatileStore: struct { base_addr: VReg, pin: VReg, offset: u32 },
     VolatileLoad: struct { base_addr: VReg, dest: VReg, pin: VReg, offset: u32 },
     CallExternal: struct { src: VReg, target: []const u8 },
     Label: []const u8,

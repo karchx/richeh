@@ -69,8 +69,11 @@ pub const OptPasses = struct {
                 .Store => |s| {
                     const val = self.know_const.get(s.src);
                     if (val) |lat| {
-                        if (lat == .Const) try self.know_symbol.put(s.symbol, lat);
+                        if (lat == .Const) {
+                            try self.know_symbol.put(s.symbol, lat);
+                        }
                     }
+                    try self.append_opt_pass(&ir_pass, inst);
                 },
                 .Load => |l| {
                     const val = self.know_symbol.get(l.symbol);
@@ -84,13 +87,14 @@ pub const OptPasses = struct {
                     }
                     try self.append_opt_pass(&ir_pass, inst);
                 },
-                .Shl => |op| {
+                inline .Add, .Sub, .Shl => |op, tag| {
                     const val1 = self.know_const.get(op.src1) orelse .Top;
                     const val2 = self.know_const.get(op.src2) orelse .Top;
 
                     if (val1 == .Const and val2 == .Const) {
-                        const result_shl = val1.Const << @intCast(val2.Const);
-                        try self.append_opt_pass(&ir_pass, .{ .Imm = .{ .dest = op.dest, .imm_val = result_shl } });
+                        const result = fold_bin(tag, val1.Const, val2.Const);
+                        try self.know_const.put(op.dest, .{ .Const = result });
+                        try self.append_opt_pass(&ir_pass, .{ .Imm = .{ .dest = op.dest, .imm_val = result } });
                     } else {
                         try self.append_opt_pass(&ir_pass, inst);
                     }
@@ -104,5 +108,14 @@ pub const OptPasses = struct {
 
     fn append_opt_pass(_: *Self, data: *ArrayList(IrInstruction), instr: IrInstruction) IrError!void {
         data.append(instr) catch return IrError.MemoryAllocationFailed;
+    }
+
+    fn fold_bin(op: IrOpCode, a: u32, b: u32) u32 {
+        return switch (op) {
+            .Add => a +% b,
+            .Sub => a -% b,
+            .Shl => a << @as(u5, @truncate(b)),
+            else => unreachable,
+        };
     }
 };

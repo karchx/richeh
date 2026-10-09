@@ -374,7 +374,10 @@ pub const CFG = struct {
                     .Imm => |v| {
                         try self.defs.put(v.dest, ref);
                     },
-                    .Add => |v| {
+                    .Add, .Sub, .Shl => |v| {
+                        try self.defs.put(v.dest, ref);
+                    },
+                    .VolatileLoad => |v| {
                         try self.defs.put(v.dest, ref);
                     },
                     .VolatileStore, .Jump, .CallExternal, .LoadLiteral => {
@@ -516,7 +519,6 @@ pub const CFG = struct {
             .Mult => |v| v.dest,
             .Shl => |v| v.dest,
             else => null,
-            // .Store, .VolatileStore, .VolatileLoad, .CallExternal, .Jump, .Label => null,
         };
     }
 

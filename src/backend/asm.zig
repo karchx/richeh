@@ -133,7 +133,9 @@ pub const Asm = struct {
                         try writer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), vs.offset });
                     }
                 },
-
+                .VolatileLoad => {
+                    std.debug.print("Missing VL\n", .{});
+                },
                 .CallExternal => |ce| {
                     const idx = assignment.get(ce.src).?;
                     const arg = phys_regs[@intCast(idx)];
