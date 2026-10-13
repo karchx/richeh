@@ -487,17 +487,17 @@ pub const CFG = struct {
         var used_vregs = ArrayList(VReg).init(self.allocator);
         errdefer used_vregs.deinit();
         switch (instr) {
-            .Add => |v| {
-                try used_vregs.append(v.src1);
-                try used_vregs.append(v.src2);
-            },
-            .Mult => |v| {
+            .Add, .Mult, .Shl, .Sub => |v| {
                 try used_vregs.append(v.src1);
                 try used_vregs.append(v.src2);
             },
             .VolatileStore => |v| {
-                try used_vregs.append(v.pin);
+                try used_vregs.append(v.value);
                 try used_vregs.append(v.base_addr);
+                try used_vregs.append(v.offset);
+            },
+            .VolatileLoad => |v| {
+                try used_vregs.append(v.value);
             },
             .CallExternal => |v| {
                 try used_vregs.append(v.src);
@@ -515,9 +515,8 @@ pub const CFG = struct {
             .Imm => |v| v.dest,
             .LoadLiteral => |v| v.dest,
             .Load => |v| v.dest,
-            .Add => |v| v.dest,
-            .Mult => |v| v.dest,
-            .Shl => |v| v.dest,
+            .VolatileLoad => |v| v.dest,
+            .Add, .Mult, .Shl, .Sub => |v| v.dest,
             else => null,
         };
     }

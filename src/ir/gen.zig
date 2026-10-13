@@ -140,7 +140,7 @@ pub const Gen = struct {
                 const emit_key = std.fmt.allocPrint(self.builder_proc.allocator, "emit_{d}_{d}", .{ offset, pin_reg }) catch return IrError.MemoryAllocationFailed;
                 if (!self.env.contains(emit_key)) {
                     try self.builder_proc.emit(.{
-                        .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = offset },
+                        .VolatileStore = .{ .base_addr = base_addr_reg, .value = mask_reg, .offset = offset },
                     });
                     self.env.put(emit_key, offset) catch return IrError.MemoryAllocationFailed;
                 }
@@ -157,11 +157,11 @@ pub const Gen = struct {
                 const twelve_reg = self.builder_proc.allocReg();
                 try self.builder_proc.emit(.{ .Imm = .{ .dest = twelve_reg, .imm_val = 12 } });
 
-                const offset_reg = self.builder_proc.allocReg();
+                const offset_reg: VReg = self.builder_proc.allocReg();
                 try self.builder_proc.emit(.{ .Sub = .{ .dest = offset_reg, .src1 = twelve_reg, .src2 = shl_reg } });
 
                 try self.builder_proc.emit(.{
-                    .VolatileStore = .{ .base_addr = base_addr_reg, .pin = mask_reg, .offset = offset_reg },
+                    .VolatileStore = .{ .base_addr = base_addr_reg, .value = mask_reg, .offset = offset_reg },
                 });
 
                 return null;
@@ -189,7 +189,7 @@ pub const Gen = struct {
                 const reg = self.builder_proc.allocReg();
 
                 try self.builder_proc.emit(.{
-                    .VolatileLoad = .{ .base_addr = base_addr_reg, .dest = reg, .pin = mask_reg_in, .offset = offset },
+                    .VolatileLoad = .{ .base_addr = base_addr_reg, .dest = reg, .value = mask_reg_in, .offset = offset },
                 });
 
                 return reg;

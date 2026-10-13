@@ -122,7 +122,7 @@ pub const Asm = struct {
                 },
                 .VolatileStore => |vs| {
                     const base_idx = assignment.get(vs.base_addr).?;
-                    const pin_idx = assignment.get(vs.pin).?;
+                    const pin_idx = assignment.get(vs.value).?;
 
                     const base = phys_regs[@intCast(base_idx)];
                     const pin = phys_regs[@intCast(pin_idx)];
