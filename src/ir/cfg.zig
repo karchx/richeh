@@ -498,6 +498,7 @@ pub const CFG = struct {
             },
             .VolatileLoad => |v| {
                 try used_vregs.append(v.value);
+                try used_vregs.append(v.base_addr);
             },
             .CallExternal => |v| {
                 try used_vregs.append(v.src);
