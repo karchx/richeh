@@ -127,10 +127,11 @@ pub const Asm = struct {
                     const base = phys_regs[@intCast(base_idx)];
                     const pin = phys_regs[@intCast(pin_idx)];
                     // TODO: refactor
-                    if (vs.offset == 36) {
-                        try app_buffer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), vs.offset });
-                    } else {
-                        try writer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), vs.offset });
+                    switch (vs.offset) {
+                        // if (vs.offset == 36) {
+                        // We assume that the value is 36
+                        .Imm => |imm| try app_buffer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), imm }),
+                        .Reg => |reg| try writer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), reg }),
                     }
                 },
                 .VolatileLoad => {

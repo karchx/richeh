@@ -494,7 +494,10 @@ pub const CFG = struct {
             .VolatileStore => |v| {
                 try used_vregs.append(v.value);
                 try used_vregs.append(v.base_addr);
-                try used_vregs.append(v.offset);
+                switch (v.offset) {
+                    .Reg => |reg| try used_vregs.append(reg),
+                    .Imm => {},
+                }
             },
             .VolatileLoad => |v| {
                 try used_vregs.append(v.value);

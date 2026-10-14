@@ -48,7 +48,7 @@ pub const IrInstruction = union(IrOpCode) {
     Sub: BinOp,
     Mult: BinOp,
     Shl: BinOp,
-    VolatileStore: struct { base_addr: VReg, value: VReg, offset: u32 },
+    VolatileStore: struct { base_addr: VReg, value: VReg, offset: union(enum) { Imm: u32, Reg: VReg } },
     VolatileLoad: struct { base_addr: VReg, dest: VReg, value: VReg, offset: u32 },
     CallExternal: struct { src: VReg, target: []const u8 },
     Label: []const u8,

@@ -104,7 +104,12 @@ pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
         .Add => |op| try writer.print("v{d} = ADD(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
         .Sub => |op| try writer.print("v{d} = SUB(v{d}, v{d})\n", .{ op.dest, op.src1, op.src2 }),
         .Store => |store| try writer.print("STORE(v{d}, \"{s}\")\n", .{ store.src, store.symbol }),
-        .VolatileStore => |vs| try writer.print("VolatileStore(base_addr=v{d}, value=v{d}, offset={d})\n", .{ vs.base_addr, vs.value, vs.offset }),
+        .VolatileStore => |vs| {
+            switch (vs.offset) {
+                .Imm => |imm| try writer.print("VolatileStore(base_addr=v{d}, value=v{d}, offset={d})\n", .{ vs.base_addr, vs.value, imm }),
+                .Reg => |reg| try writer.print("VolatileStore(base_addr=v{d}, value=v{d}, offset=v{d})\n", .{ vs.base_addr, vs.value, reg }),
+            }
+        },
         .VolatileLoad => |vl| try writer.print("VolatileLoad(base_addr=v{d}, dest=v{d}, value=v{d}, offset={d})\n", .{ vl.base_addr, vl.dest, vl.value, vl.offset }),
         .CallExternal => |ce| try writer.print("CallExternal(target=\"{s}\", args=v{})\n", .{ ce.target, ce.src }),
         .Jump => |jump| try writer.print("Jump({s})\n", .{jump}),
