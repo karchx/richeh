@@ -118,6 +118,12 @@ pub const Asm = struct {
                     const src2 = phys_regs[@intCast(assignment.get(value.src2).?)];
                     try writer.print("  sub {s}, {s}, {s}\n\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
                 },
+                .Shl => |value| {
+                    const dest = phys_regs[@intCast(assignment.get(value.dest).?)];
+                    const src1 = phys_regs[@intCast(assignment.get(value.src1).?)];
+                    const src2 = phys_regs[@intCast(assignment.get(value.src2).?)];
+                    try writer.print("  slli {s}, {s}, {s}\n\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
+                },
                 .LoadLiteral => |llit| {
                     const r_idx = assignment.get(llit.dest).?;
                     const r = phys_regs[@intCast(r_idx)];
@@ -137,7 +143,7 @@ pub const Asm = struct {
                         // We assume that the value is 36
                         .Imm => |imm| try app_buffer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), imm }),
                         .Reg => |off_vreg| {
-                            const off_phys = phys_regs[@intCast(off_vreg)];
+                            const off_phys = phys_regs[@intCast(assignment.get(off_vreg).?)];
                             const temp = PhysReg.a12;
                             try writer.print("  add {s}, {s}, {s}\n", .{ @tagName(temp), @tagName(base), @tagName(off_phys) });
 
@@ -145,8 +151,10 @@ pub const Asm = struct {
                         },
                     }
                 },
-                .VolatileLoad => {
-                    std.debug.print("Missing VL\n", .{});
+                .VolatileLoad => |vl| {
+                    const dest = phys_regs[@intCast(assignment.get(vl.dest).?)];
+                    const base = phys_regs[@intCast(assignment.get(vl.base_addr).?)];
+                    try writer.print("  l32i {s}, {s}, 0x{x}\n", .{ @tagName(dest), @tagName(base), vl.offset });
                 },
                 .CallExternal => |ce| {
                     const idx = assignment.get(ce.src).?;

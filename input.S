@@ -6,20 +6,23 @@
 app_main:
   entry a1, 32
   /* CONFIG REGISTERS */
-  movi a4, 0x60004000
-  movi a3, 0x20
-  s32i a3, a4, 0x24
+  movi a3, 0x60004000
+  movi a5, 0x20
+  s32i a5, a3, 0x24
 
 .main_loop:
-  movi a2, 0x40
+  movi a4, 0x6
 
-  movi a5, 0x2
+  l32i a2, a3, 0x3c
+  movi a2, 0x2
 
-  movi a5, 0xc
+  slli a4, a4, a2
 
-  sub a2, a5, a2
+  movi a2, 0xc
 
-  add a3, a4, a13
-  s32i a3, a4, 0xb
+  sub a2, a2, a4
+
+  add a12, a3, a2
+  s32i a5, a12, 0
   j .main_loop
   

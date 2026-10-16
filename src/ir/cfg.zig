@@ -380,6 +380,9 @@ pub const CFG = struct {
                     .VolatileLoad => |v| {
                         try self.defs.put(v.dest, ref);
                     },
+                    .ExtractBit => |v| {
+                        try self.defs.put(v.dest, ref);
+                    },
                     .VolatileStore, .Jump, .CallExternal, .LoadLiteral => {
                         try self.work_list_seed.append(ref);
                     },
@@ -500,8 +503,11 @@ pub const CFG = struct {
                 }
             },
             .VolatileLoad => |v| {
-                try used_vregs.append(v.value);
                 try used_vregs.append(v.base_addr);
+            },
+            .ExtractBit => |eb| {
+                try used_vregs.append(eb.src);
+                try used_vregs.append(eb.pos);
             },
             .CallExternal => |v| {
                 try used_vregs.append(v.src);
@@ -520,6 +526,7 @@ pub const CFG = struct {
             .LoadLiteral => |v| v.dest,
             .Load => |v| v.dest,
             .VolatileLoad => |v| v.dest,
+            .ExtractBit => |v| v.dest,
             .Add, .Mult, .Shl, .Sub => |v| v.dest,
             else => null,
         };

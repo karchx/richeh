@@ -110,7 +110,8 @@ pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
                 .Reg => |reg| try writer.print("VolatileStore(base_addr=v{d}, value=v{d}, offset=v{d})\n", .{ vs.base_addr, vs.value, reg }),
             }
         },
-        .VolatileLoad => |vl| try writer.print("VolatileLoad(base_addr=v{d}, dest=v{d}, value=v{d}, offset={d})\n", .{ vl.base_addr, vl.dest, vl.value, vl.offset }),
+        .VolatileLoad => |vl| try writer.print("VolatileLoad(base_addr=v{d}, dest=v{d}, offset={d})\n", .{ vl.base_addr, vl.dest, vl.offset }),
+        .ExtractBit => |eb| try writer.print("ExtractBit(dest=v{d}, src=v{d}, pos=v{d}, width={d})\n", .{ eb.dest, eb.src, eb.pos, eb.width }),
         .CallExternal => |ce| try writer.print("CallExternal(target=\"{s}\", args=v{})\n", .{ ce.target, ce.src }),
         .Jump => |jump| try writer.print("Jump({s})\n", .{jump}),
     }

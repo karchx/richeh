@@ -170,29 +170,21 @@ pub const Gen = struct {
                 const base_addr_reg = self.gpio_base;
                 const pin_reg = (try self.visit(input.val)).?;
 
-                const mask_key = std.fmt.allocPrint(self.builder_proc.allocator, "mask_{d}", .{pin_reg}) catch return IrError.MemoryAllocationFailed;
-                const mask_reg_in = if (self.env.get(mask_key)) |existing|
-                    existing
-                else blk: {
-                    const one = self.builder_proc.allocReg();
-                    try self.builder_proc.emit(.{ .Imm = .{ .dest = one, .imm_val = 1 } });
-
-                    const new_mask = self.builder_proc.allocReg();
-                    try self.builder_proc.emit(.{ .Shl = .{ .dest = new_mask, .src1 = one, .src2 = pin_reg } });
-                    self.env.put(mask_key, new_mask) catch return IrError.MemoryAllocationFailed;
-                    break :blk new_mask;
-                };
-
                 // SET INPUT PIN
                 // 60 = 0X3C
                 const offset: u32 = 60;
                 const reg = self.builder_proc.allocReg();
 
                 try self.builder_proc.emit(.{
-                    .VolatileLoad = .{ .base_addr = base_addr_reg, .dest = reg, .value = mask_reg_in, .offset = offset },
+                    .VolatileLoad = .{ .base_addr = base_addr_reg, .dest = reg, .offset = offset },
                 });
 
-                return reg;
+                const bit_reg = self.builder_proc.allocReg();
+                try self.builder_proc.emit(.{
+                    .ExtractBit = .{ .dest = bit_reg, .src = reg, .pos = pin_reg, .width = 1 },
+                });
+
+                return bit_reg;
             },
             .wait_statement => |wait| {
                 const FREQ_CPU_DEFAULT: u32 = 100; // FREQ IN Hz
