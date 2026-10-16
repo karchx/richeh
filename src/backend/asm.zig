@@ -141,7 +141,7 @@ pub const Asm = struct {
                             const temp = PhysReg.a12;
                             try writer.print("  add {s}, {s}, {s}\n", .{ @tagName(temp), @tagName(base), @tagName(off_phys) });
 
-                            try writer.print("  s32i {s}, {s}, 0\n", .{ @tagName(pin), @tagName(base) });
+                            try writer.print("  s32i {s}, {s}, 0\n", .{ @tagName(pin), @tagName(temp) });
                         },
                     }
                 },
