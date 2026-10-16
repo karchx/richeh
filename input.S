@@ -17,6 +17,9 @@ app_main:
 
   movi a5, 0xc
 
+  sub a2, a5, a2
+
+  add a3, a4, a13
   s32i a3, a4, 0xb
   j .main_loop
   

@@ -104,14 +104,19 @@ pub const Asm = struct {
                     try writer.print("\n{s}:\n", .{label});
                 },
                 .Imm => |imm| {
-                    const r_idx = assignment.get(imm.dest).?;
-                    const r = phys_regs[@intCast(r_idx)];
+                    const r = phys_regs[@intCast(assignment.get(imm.dest).?)];
                     // imm_val is 32 in decimal assign GPIO5 TODO: create map for values GPIO in decimal or hex
                     if (imm.imm_val == 32 or imm.imm_val == 1610629120) {
                         try app_buffer.print("  movi {s}, 0x{x}\n", .{ @tagName(r), imm.imm_val });
                     } else {
                         try writer.print("  movi {s}, 0x{x}\n\n", .{ @tagName(r), imm.imm_val });
                     }
+                },
+                .Sub => |value| {
+                    const dest = phys_regs[@intCast(assignment.get(value.dest).?)];
+                    const src1 = phys_regs[@intCast(assignment.get(value.src1).?)];
+                    const src2 = phys_regs[@intCast(assignment.get(value.src2).?)];
+                    try writer.print("  sub {s}, {s}, {s}\n\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
                 },
                 .LoadLiteral => |llit| {
                     const r_idx = assignment.get(llit.dest).?;
@@ -131,7 +136,13 @@ pub const Asm = struct {
                         // if (vs.offset == 36) {
                         // We assume that the value is 36
                         .Imm => |imm| try app_buffer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), imm }),
-                        .Reg => |reg| try writer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), reg }),
+                        .Reg => |off_vreg| {
+                            const off_phys = phys_regs[@intCast(off_vreg)];
+                            const temp = PhysReg.a12;
+                            try writer.print("  add {s}, {s}, {s}\n", .{ @tagName(temp), @tagName(base), @tagName(off_phys) });
+
+                            try writer.print("  s32i {s}, {s}, 0\n", .{ @tagName(pin), @tagName(base) });
+                        },
                     }
                 },
                 .VolatileLoad => {
