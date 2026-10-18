@@ -111,7 +111,12 @@ pub fn print_ir_code(inst: IrInstruction, writer: *std.Io.Writer) !void {
             }
         },
         .VolatileLoad => |vl| try writer.print("VolatileLoad(base_addr=v{d}, dest=v{d}, offset={d})\n", .{ vl.base_addr, vl.dest, vl.offset }),
-        .ExtractBit => |eb| try writer.print("ExtractBit(dest=v{d}, src=v{d}, pos=v{d}, width={d})\n", .{ eb.dest, eb.src, eb.pos, eb.width }),
+        .ExtractBit => |eb| {
+            switch (eb.pos) {
+                .Reg => |reg| try writer.print("ExtractBit(dest=v{d}, src=v{d}, pos=v{d}, width={d})\n", .{ eb.dest, eb.src, reg, eb.width }),
+                .Imm => |imm| try writer.print("ExtractBit(dest=v{d}, src=v{d}, pos={d}, width={d})\n", .{ eb.dest, eb.src, imm, eb.width }),
+            }
+        },
         .CallExternal => |ce| try writer.print("CallExternal(target=\"{s}\", args=v{})\n", .{ ce.target, ce.src }),
         .Jump => |jump| try writer.print("Jump({s})\n", .{jump}),
     }

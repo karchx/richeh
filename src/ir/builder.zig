@@ -52,7 +52,15 @@ pub const IrInstruction = union(IrOpCode) {
     Shl: BinOp,
     VolatileStore: struct { base_addr: VReg, value: VReg, offset: union(enum) { Imm: u32, Reg: VReg } },
     VolatileLoad: struct { base_addr: VReg, dest: VReg, offset: u32 },
-    ExtractBit: struct { dest: VReg, src: VReg, pos: VReg, width: u32 },
+    ExtractBit: struct {
+        dest: VReg,
+        src: VReg,
+        pos: union(enum) {
+            Imm: u5, // 0..31
+            Reg: VReg,
+        },
+        width: u32,
+    },
     CallExternal: struct { src: VReg, target: []const u8 },
     Label: []const u8,
     Jump: []const u8,

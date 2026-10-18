@@ -11,8 +11,6 @@ app_main:
   s32i a5, a3, 0x24
 
 .main_loop:
-  movi a4, 0x6
-
   l32i a2, a3, 0x3c
   movi a2, 0x2
 

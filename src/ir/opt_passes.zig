@@ -87,6 +87,25 @@ pub const OptPasses = struct {
                     }
                     try self.append_opt_pass(&ir_pass, inst);
                 },
+                .ExtractBit => |l| {
+                    switch (l.pos) {
+                        .Reg => |reg| {
+                            if (self.know_const.get(reg)) |know_val| {
+                                switch (know_val) {
+                                    .Const => |c_val| {
+                                        try self.append_opt_pass(&ir_pass, .{
+                                            .ExtractBit = .{ .dest = l.dest, .src = l.src, .pos = .{ .Imm = @intCast(c_val) }, .width = l.width },
+                                        });
+                                    },
+                                    else => try self.append_opt_pass(&ir_pass, inst),
+                                }
+                            } else {
+                                try self.append_opt_pass(&ir_pass, inst);
+                            }
+                        },
+                        .Imm => {},
+                    }
+                },
                 inline .Add, .Sub, .Shl => |op, tag| {
                     const val1 = self.know_const.get(op.src1) orelse .Top;
                     const val2 = self.know_const.get(op.src2) orelse .Top;

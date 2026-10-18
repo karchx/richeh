@@ -507,7 +507,10 @@ pub const CFG = struct {
             },
             .ExtractBit => |eb| {
                 try used_vregs.append(eb.src);
-                try used_vregs.append(eb.pos);
+                switch (eb.pos) {
+                    .Reg => |reg| try used_vregs.append(reg),
+                    .Imm => {},
+                }
             },
             .CallExternal => |v| {
                 try used_vregs.append(v.src);

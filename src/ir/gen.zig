@@ -181,7 +181,7 @@ pub const Gen = struct {
 
                 const bit_reg = self.builder_proc.allocReg();
                 try self.builder_proc.emit(.{
-                    .ExtractBit = .{ .dest = bit_reg, .src = reg, .pos = pin_reg, .width = 1 },
+                    .ExtractBit = .{ .dest = bit_reg, .src = reg, .pos = .{ .Reg = pin_reg }, .width = 1 },
                 });
 
                 return bit_reg;
