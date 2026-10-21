@@ -12,6 +12,7 @@ app_main:
 
 .main_loop:
   l32i a2, a3, 0x3c
+  extui a4, a2, 6, 1
   movi a2, 0x2
 
   slli a4, a4, a2

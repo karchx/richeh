@@ -156,6 +156,17 @@ pub const Asm = struct {
                     const base = phys_regs[@intCast(assignment.get(vl.base_addr).?)];
                     try writer.print("  l32i {s}, {s}, 0x{x}\n", .{ @tagName(dest), @tagName(base), vl.offset });
                 },
+                .ExtractBit => |eb| {
+                    const dest = phys_regs[@intCast(assignment.get(eb.dest).?)];
+                    const src = phys_regs[@intCast(assignment.get(eb.src).?)];
+                    switch (eb.pos) {
+                        .Imm => |imm| try writer.print("  extui {s}, {s}, {d}, {d}\n", .{ @tagName(dest), @tagName(src), imm, eb.width }),
+                        .Reg => |reg| {
+                            const v_reg = phys_regs[@intCast(assignment.get(reg).?)];
+                            try writer.print("  extui {s}, {s}, {s}, {d}\n", .{ @tagName(dest), @tagName(src), @tagName(v_reg), eb.width });
+                        },
+                    }
+                },
                 .CallExternal => |ce| {
                     const idx = assignment.get(ce.src).?;
                     const arg = phys_regs[@intCast(idx)];
