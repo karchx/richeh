@@ -109,20 +109,26 @@ pub const Asm = struct {
                     if (imm.imm_val == 32 or imm.imm_val == 1610629120) {
                         try app_buffer.print("  movi {s}, 0x{x}\n", .{ @tagName(r), imm.imm_val });
                     } else {
-                        try writer.print("  movi {s}, 0x{x}\n\n", .{ @tagName(r), imm.imm_val });
+                        try writer.print("  movi {s}, 0x{x}\n", .{ @tagName(r), imm.imm_val });
                     }
                 },
                 .Sub => |value| {
                     const dest = phys_regs[@intCast(assignment.get(value.dest).?)];
                     const src1 = phys_regs[@intCast(assignment.get(value.src1).?)];
                     const src2 = phys_regs[@intCast(assignment.get(value.src2).?)];
-                    try writer.print("  sub {s}, {s}, {s}\n\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
+                    try writer.print("  sub {s}, {s}, {s}\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
+                },
+                .Mult => |value| {
+                    const dest = phys_regs[@intCast(assignment.get(value.dest).?)];
+                    const src1 = phys_regs[@intCast(assignment.get(value.src1).?)];
+                    const src2 = phys_regs[@intCast(assignment.get(value.src2).?)];
+                    try writer.print("  mull {s}, {s}, {s}\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
                 },
                 .Shl => |value| {
                     const dest = phys_regs[@intCast(assignment.get(value.dest).?)];
                     const src1 = phys_regs[@intCast(assignment.get(value.src1).?)];
                     const src2 = phys_regs[@intCast(assignment.get(value.src2).?)];
-                    try writer.print("  slli {s}, {s}, {s}\n\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
+                    try writer.print("  slli {s}, {s}, {s}\n", .{ @tagName(dest), @tagName(src1), @tagName(src2) });
                 },
                 .LoadLiteral => |llit| {
                     const r_idx = assignment.get(llit.dest).?;
@@ -139,9 +145,13 @@ pub const Asm = struct {
                     const pin = phys_regs[@intCast(pin_idx)];
                     // TODO: refactor
                     switch (vs.offset) {
-                        // if (vs.offset == 36) {
-                        // We assume that the value is 36
-                        .Imm => |imm| try app_buffer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), imm }),
+                        .Imm => |imm| {
+                            if (imm == 36) { // hardcode! (?
+                                try app_buffer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), imm });
+                            } else {
+                                try writer.print("  s32i {s}, {s}, 0x{x}\n", .{ @tagName(pin), @tagName(base), imm });
+                            }
+                        },
                         .Reg => |off_vreg| {
                             const off_phys = phys_regs[@intCast(assignment.get(off_vreg).?)];
                             const temp = PhysReg.a12;

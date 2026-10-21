@@ -13,15 +13,9 @@ app_main:
 .main_loop:
   l32i a2, a3, 0x3c
   extui a4, a2, 6, 1
-  movi a2, 0x2
-
-  slli a4, a4, a2
-
-  movi a2, 0xc
-
-  sub a2, a2, a4
-
-  add a12, a3, a2
-  s32i a5, a12, 0
+  mull a2, a4, a5
+  sub a4, a5, a2
+  s32i a2, a3, 0x8
+  s32i a4, a3, 0xc
   j .main_loop
   

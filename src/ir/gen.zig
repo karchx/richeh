@@ -145,24 +145,33 @@ pub const Gen = struct {
                     self.env.put(emit_key, offset) catch return IrError.MemoryAllocationFailed;
                 }
 
-                const two_reg = self.builder_proc.allocReg();
-                try self.builder_proc.emit(.{ .Imm = .{ .dest = two_reg, .imm_val = 2 } });
+                if (out.val.variant == .number) {
+                    // offset pulse for HIGH or LOW
+                    // HIGH = 8 = 0x08
+                    // LOW = 12 = 0x0C
+                    const pulse: VReg = switch (out.val.variant) {
+                        .number => |val| if (val.llnum == 1) 8 else 12,
+                        else => 0,
+                    };
 
-                const shl_reg = self.builder_proc.allocReg();
-                try self.builder_proc.emit(.{ .Shl = .{ .dest = shl_reg, .src1 = level_reg, .src2 = two_reg } });
+                    try self.builder_proc.emit(.{
+                        .VolatileStore = .{ .base_addr = base_addr_reg, .value = mask_reg, .offset = .{ .Imm = pulse } },
+                    });
+                } else {
+                    const set_val = self.builder_proc.allocReg();
+                    try self.builder_proc.emit(.{ .Mult = .{ .dest = set_val, .src1 = level_reg, .src2 = mask_reg } });
 
-                // offset pulse for HIGH or LOW
-                // HIGH = 8 = 0x08
-                // LOW = 12 = 0x0C
-                const twelve_reg = self.builder_proc.allocReg();
-                try self.builder_proc.emit(.{ .Imm = .{ .dest = twelve_reg, .imm_val = 12 } });
+                    const clr_val = self.builder_proc.allocReg();
+                    try self.builder_proc.emit(.{ .Sub = .{ .dest = clr_val, .src1 = mask_reg, .src2 = set_val } });
 
-                const offset_reg: VReg = self.builder_proc.allocReg();
-                try self.builder_proc.emit(.{ .Sub = .{ .dest = offset_reg, .src1 = twelve_reg, .src2 = shl_reg } });
+                    try self.builder_proc.emit(.{
+                        .VolatileStore = .{ .base_addr = base_addr_reg, .value = set_val, .offset = .{ .Imm = 0x08 } },
+                    });
 
-                try self.builder_proc.emit(.{
-                    .VolatileStore = .{ .base_addr = base_addr_reg, .value = mask_reg, .offset = .{ .Reg = offset_reg } },
-                });
+                    try self.builder_proc.emit(.{
+                        .VolatileStore = .{ .base_addr = base_addr_reg, .value = clr_val, .offset = .{ .Imm = 0x0C } },
+                    });
+                }
 
                 return null;
             },
